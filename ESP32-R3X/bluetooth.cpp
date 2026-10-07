@@ -3133,10 +3133,10 @@ bool jammerActive = false;
 int bluetooth_channels[] = {32, 34, 46, 48, 50, 52, 0, 1, 2, 4, 6, 8, 22, 24, 26, 28, 30, 74, 76, 78, 80};
 int ble_channels[] = {2, 26, 80};
 
-const byte BLE_channels[] = {2, 26, 80};
-byte channelGroup1[] = {2, 5, 8, 11};
-byte channelGroup2[] = {26, 29, 32, 35};
-byte channelGroup3[] = {80, 83, 86, 89};
+const uint8_t BLE_channels[] = {2, 26, 80};
+uint8_t channelGroup1[] = {2, 5, 8, 11};
+uint8_t channelGroup2[] = {26, 29, 32, 35};
+uint8_t channelGroup3[] = {80, 83, 86, 89};
 
 #define SCREEN_HEIGHT 320
 #define LINE_HEIGHT 12
@@ -3222,7 +3222,7 @@ void checkButtons() {
   }
 }
 
-void configureRadio(RF24 &radio, const byte* channels, size_t size) {
+void configureRadio(RF24 &radio, const uint8_t* channels, size_t size) {
   radio.setAutoAck(false);
   radio.stopListening();
   radio.setRetries(0, 0);
@@ -4094,8 +4094,8 @@ bool isSelectButtonPressed() {
   return isButtonPressed(BTN_SELECT);
 }
 
-byte getRegister(byte r) {
-  byte c;
+uint8_t getRegister(uint8_t r) {
+  uint8_t c;
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
@@ -4107,7 +4107,7 @@ bool carrierDetected() {
   return getRegister(_NRF24_RPD) & 0x01;
 }
 
-void setRegister(byte r, byte v) {
+void setRegister(uint8_t r, uint8_t v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
@@ -5005,19 +5005,19 @@ OperationMode currentMode = WiFi_MODULE;
 
 bool jammerActive = false;
 
-const byte bluetooth_channels[] =        {32, 34, 46, 48, 50, 52, 0, 1, 2, 4, 6, 8, 22, 24, 26, 28, 30, 74, 76, 78, 80};
-const byte ble_channels[] =              {2, 26, 80};
-const byte WiFi_channels[] =             {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
-const byte usbWireless_channels[] =      {40, 50, 60};
-const byte videoTransmitter_channels[] = {70, 75, 80};
-const byte rc_channels[] =               {1, 3, 5, 7};
-const byte zigbee_channels[] =           {11, 15, 20, 25};
-const byte nrf24_channels[] =            {76, 78, 79};
+const uint8_t bluetooth_channels[] =        {32, 34, 46, 48, 50, 52, 0, 1, 2, 4, 6, 8, 22, 24, 26, 28, 30, 74, 76, 78, 80};
+const uint8_t ble_channels[] =              {2, 26, 80};
+const uint8_t WiFi_channels[] =             {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+const uint8_t usbWireless_channels[] =      {40, 50, 60};
+const uint8_t videoTransmitter_channels[] = {70, 75, 80};
+const uint8_t rc_channels[] =               {1, 3, 5, 7};
+const uint8_t zigbee_channels[] =           {11, 15, 20, 25};
+const uint8_t nrf24_channels[] =            {76, 78, 79};
 
-const byte BLE_channels[] = {2, 26, 80};
-byte channelGroup1[] = {2, 5, 8, 11};
-byte channelGroup2[] = {26, 29, 32, 35};
-byte channelGroup3[] = {80, 83, 86, 89};
+const uint8_t BLE_channels[] = {2, 26, 80};
+uint8_t channelGroup1[] = {2, 5, 8, 11};
+uint8_t channelGroup2[] = {26, 29, 32, 35};
+uint8_t channelGroup3[] = {80, 83, 86, 89};
 
 #define SCREEN_HEIGHT 320
 #define LINE_HEIGHT 12
@@ -5115,7 +5115,7 @@ void prokillHandleNavButtons() {
   }
 }
 
-void configureRadio(RF24 &radio, const byte* channels, size_t size) {
+void configureRadio(RF24 &radio, const uint8_t* channels, size_t size) {
   radio.setAutoAck(false);
   radio.stopListening();
   radio.setRetries(0, 0);
@@ -5523,8 +5523,8 @@ static constexpr int kHopCount = sizeof(kHopChannels) / sizeof(kHopChannels[0]);
 
 static const uint8_t kPromiscAddr[5] = {0xAA, 0xAA, 0xAA, 0xAA, 0xAA};
 
-static byte esbGetRegister(byte r) {
-  byte c;
+static uint8_t esbGetRegister(uint8_t r) {
+  uint8_t c;
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
@@ -5532,7 +5532,7 @@ static byte esbGetRegister(byte r) {
   return c;
 }
 
-static void esbSetRegister(byte r, byte v) {
+static void esbSetRegister(uint8_t r, uint8_t v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
@@ -6400,8 +6400,8 @@ static int rpVisibleLogLines() {
 }
 static int rpSelEndY() { return kRpSelBoxTop + kRpSelBoxH - 2; }
 
-static byte rpGetRegister(byte r) {
-  byte c;
+static uint8_t rpGetRegister(uint8_t r) {
+  uint8_t c;
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
@@ -6409,7 +6409,7 @@ static byte rpGetRegister(byte r) {
   return c;
 }
 
-static void rpSetRegister(byte r, byte v) {
+static void rpSetRegister(uint8_t r, uint8_t v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
@@ -7238,8 +7238,8 @@ static int mjVisibleLogLines() {
   return n > kMjMaxLogLines ? kMjMaxLogLines : n;
 }
 
-static byte mjGetRegister(byte r) {
-  byte c;
+static uint8_t mjGetRegister(uint8_t r) {
+  uint8_t c;
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
@@ -7247,7 +7247,7 @@ static byte mjGetRegister(byte r) {
   return c;
 }
 
-static void mjSetRegister(byte r, byte v) {
+static void mjSetRegister(uint8_t r, uint8_t v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
@@ -8111,8 +8111,8 @@ static int injVisibleLogLines() {
   return n < 1 ? 1 : (n > kInjMaxLogLines ? kInjMaxLogLines : n);
 }
 
-static byte injGetRegister(byte r) {
-  byte c;
+static uint8_t injGetRegister(uint8_t r) {
+  uint8_t c;
   digitalWrite(CSN, LOW);
   SPI.transfer(r & 0x1F);
   c = SPI.transfer(0);
@@ -8120,7 +8120,7 @@ static byte injGetRegister(byte r) {
   return c;
 }
 
-static void injSetRegister(byte r, byte v) {
+static void injSetRegister(uint8_t r, uint8_t v) {
   digitalWrite(CSN, LOW);
   SPI.transfer((r & 0x1F) | 0x20);
   SPI.transfer(v);
@@ -8372,10 +8372,10 @@ static void injAddTarget(const uint8_t* addr, uint8_t ch, bool vulnerable, const
 static void injConfigureRx(uint8_t prefix) {
   injDisable();
   injPowerUp();
-  // 3-byte address for remnant recovery (Goodspeed-style)
+  // 3-uint8_t address for remnant recovery (Goodspeed-style)
   const uint8_t addr3[5] = {prefix, 0x00, 0x00, 0x00, 0x00};
   injWriteRegMulti(_INJ_RX_ADDR_P0, addr3, 5);
-  injSetRegister(_INJ_SETUP_AW, 0x01);  // 3-byte address
+  injSetRegister(_INJ_SETUP_AW, 0x01);  // 3-uint8_t address
   injSetRegister(_INJ_EN_AA, 0x00);
   injSetRegister(_INJ_EN_RXADDR, 0x01);
   injSetRegister(_INJ_SETUP_RETR, 0x00);
@@ -8393,14 +8393,14 @@ static void injConfigureTx(const uint8_t* addr5, uint8_t ch) {
   injPowerUp();
   injWriteRegMulti(_INJ_TX_ADDR, addr5, 5);
   injWriteRegMulti(_INJ_RX_ADDR_P0, addr5, 5);
-  injSetRegister(_INJ_SETUP_AW, 0x03);  // 5-byte
+  injSetRegister(_INJ_SETUP_AW, 0x03);  // 5-uint8_t
   injSetRegister(_INJ_EN_AA, 0x00);
   injSetRegister(_INJ_EN_RXADDR, 0x01);
   injSetRegister(_INJ_SETUP_RETR, 0x00);
   injSetRegister(_INJ_RF_SETUP, 0x0F);
   injSetRegister(_INJ_RX_PW_P0, 10);
   injSetRegister(_INJ_RF_CH, ch);
-  // PWR_UP | PRIM_TX | EN_CRC | CRCO (2-byte CRC) — Logitech uses ESB CRC
+  // PWR_UP | PRIM_TX | EN_CRC | CRCO (2-uint8_t CRC) — Logitech uses ESB CRC
   injSetRegister(_INJ_CONFIG, 0x0E);
   injFlushTx();
   injFlushRx();

@@ -5,11 +5,18 @@
 
 /*──────────────────── Colors ────────────────────*/
 const uint16_t GRAY = 0x8410, BLUE = 0x001F, RED = 0xF800,
-               GREEN  = 0xB721, BLACK = 0x0000, WHITE = 0xFFFF,
+               GREEN  = 0x07E0, BLACK = 0x0000, WHITE = 0xFFFF,
                LIGHT_GRAY = 0xC618, DARK_GRAY = 0x4208;
 
+/*──────────────────── Cyber-Gadget Palette ────────────────────*/
+#define CYBER_CYAN     0x07FF  // #00FFFF
+#define CYBER_ORANGE   0xFD20  // #FF8000
+#define CYBER_NAVY     0x0002  // #000010
+#define CYBER_GREEN    0x07E0  // #00FF00
+#define CYBER_RED      0xF800  // #FF0000
+
 uint16_t uiUniversalColor();
-#define ORANGE uiUniversalColor()
+#define ORANGE CYBER_ORANGE
                
 #define TFT_DARKBLUE   0x3166
 #define TFT_LIGHTBLUE  0x051F
@@ -19,23 +26,23 @@ uint16_t uiUniversalColor();
 #ifdef TFT_GREEN
 #undef TFT_GREEN
 #endif
-#define TFT_GREEN GREEN
+#define TFT_GREEN CYBER_GREEN
 #ifdef TFT_GREENYELLOW
 #undef TFT_GREENYELLOW
 #endif
-#define TFT_GREENYELLOW GREEN
+#define TFT_GREENYELLOW CYBER_GREEN
 
-#define BG_Dark        0x20e4
+#define BG_Dark        CYBER_NAVY
 #define BG_Light       0xf7de
 #define FG_Dark        0x3166
 #define FG_Light       0xe73c
-#define LINE_Dark      0x8410  
+#define LINE_Dark      CYBER_CYAN  
 #define LINE_Light     0x8410  
-#define ICON_Dark      0xFBE4 
-#define ICON_Light     0xFBE4
+#define ICON_Dark      CYBER_ORANGE 
+#define ICON_Light     CYBER_ORANGE
 #define TEXT_Dark      0xFFFF
 #define TEXT_Light     0x0000   
-#define UI_ACCENT      0x3166
+#define UI_ACCENT      CYBER_CYAN
 
 #define L_Dark        0x4208
 #define L_Light       0xC618

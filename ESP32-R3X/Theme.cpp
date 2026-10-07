@@ -2,7 +2,7 @@
 #include "SettingsStore.h"
 
 
-UiPalette UI = { BG_Dark, FG_Dark, ICON_Dark, TEXT_Dark, 0x3166, LINE_Dark, L_Dark, 0xFBE4, GREEN };
+UiPalette UI = { BG_Dark, FG_Dark, ICON_Dark, TEXT_Dark, UI_ACCENT, LINE_Dark, L_Dark, CYBER_ORANGE, GREEN };
 
 uint16_t uiUniversalColor() {
   return UI.warn;

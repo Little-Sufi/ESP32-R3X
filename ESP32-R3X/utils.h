@@ -170,5 +170,27 @@ namespace FeatureUI {
   int hit(const Button* btns, int n, int x, int y);
 }
 
+namespace GadgetUI {
+  void drawTacticalHeader(const char* title);
+  void drawTacticalFooter(const char* L = "BACK", const char* C = "SELECT", const char* R = "NEXT");
+  void drawGlowWindow(int16_t x, int16_t y, int16_t w, int16_t h, const char* title);
+  void drawTerminalBox(int16_t x, int16_t y, int16_t w, int16_t h);
+  void drawDiagnosticLine(const char* label, bool ok, int y);
+  bool checkExitTouch(int16_t x, int16_t y);
+}
+
+namespace System {
+  struct HealthReport {
+    bool sd;
+    bool nrf;
+    bool cc1101;
+    bool wifi;
+    bool ble;
+  };
+  
+  HealthReport performHealthCheck();
+  void showDiagnosticScreen(const HealthReport& report);
+}
+
 #endif
  

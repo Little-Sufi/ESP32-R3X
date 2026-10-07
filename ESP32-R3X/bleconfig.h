@@ -11,9 +11,14 @@
 #include <nRF24L01.h>
 #include "BleCompat.h"
 #include "esp_bt.h"
-#include "esp_bt_main.h"
 #if defined(SOC_BT_CLASSIC_SUPPORTED) && SOC_BT_CLASSIC_SUPPORTED
+#include "esp_bt_main.h"
 #include "esp_gap_bt_api.h"
+#else
+#ifndef ESP_BD_ADDR_T_DEFINED
+#define ESP_BD_ADDR_T_DEFINED
+typedef uint8_t esp_bd_addr_t[6];
+#endif
 #endif
 #include "esp_wifi.h"
 #include "shared.h"

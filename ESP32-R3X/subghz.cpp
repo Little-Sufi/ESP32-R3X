@@ -502,7 +502,7 @@ unsigned long micro_s;
 double vRealSUB[samplesSUB];
 double vImagSUB[samplesSUB];
 
-byte red[ESP32DIV_FFT_PALETTE_SIZE], green[ESP32DIV_FFT_PALETTE_SIZE],
+uint8_t red[ESP32DIV_FFT_PALETTE_SIZE], green[ESP32DIV_FFT_PALETTE_SIZE],
      blue[ESP32DIV_FFT_PALETTE_SIZE];
 
 unsigned int epochSUB = 0;
@@ -585,9 +585,14 @@ static bool buzzerArmed = false;
 static uint32_t buzzerOffAtMs = 0;
 static void replayBeep(uint16_t hz = 2200, uint16_t ms = 60) {
   #ifdef BUZZER_PIN
+  #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+  ledcAttachChannel(BUZZER_PIN, 4000, 8, BUZZER_LEDC_CH);
+  ledcWriteTone(BUZZER_PIN, hz);
+  #else
   ledcSetup(BUZZER_LEDC_CH, 4000, 8);
   ledcAttachPin(BUZZER_PIN, BUZZER_LEDC_CH);
   ledcWriteTone(BUZZER_LEDC_CH, hz);
+  #endif
   buzzerArmed = true;
   buzzerOffAtMs = millis() + ms;
   #endif
@@ -597,9 +602,13 @@ static void replayBeepPoll() {
   #ifdef BUZZER_PIN
   if (!buzzerArmed) return;
   if ((int32_t)(millis() - buzzerOffAtMs) < 0) return;
+  #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+  ledcWriteTone(BUZZER_PIN, 0);
+  ledcDetach(BUZZER_PIN);
+  #else
   ledcWriteTone(BUZZER_LEDC_CH, 0);
-
   ledcDetachPin(BUZZER_PIN);
+  #endif
   buzzerArmed = false;
   #endif
 }

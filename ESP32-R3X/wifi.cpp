@@ -358,7 +358,7 @@ unsigned long microseconds;
 double vReal[samples];
 double vImag[samples];
 
-byte palette_red[ESP32DIV_FFT_PALETTE_SIZE], palette_green[ESP32DIV_FFT_PALETTE_SIZE],
+uint8_t palette_red[ESP32DIV_FFT_PALETTE_SIZE], palette_green[ESP32DIV_FFT_PALETTE_SIZE],
      palette_blue[ESP32DIV_FFT_PALETTE_SIZE];
 
 bool buttonPressed = false;
@@ -505,7 +505,7 @@ void do_sampling_FFT() {
   delay(10);
 }
 
-esp_err_t event_handler(void* ctx, system_event_t* event) {
+esp_err_t event_handler(void* ctx, void* event) {
   return ESP_OK;
 }
 
@@ -2795,7 +2795,7 @@ static uint8_t cp_deauth_frame_default[26] = {
 };
 static uint8_t cp_deauth_frame[sizeof(cp_deauth_frame_default)];
 DNSServer dnsServer;
-const byte DNS_PORT = 53;
+const uint8_t DNS_PORT = 53;
 WebServer server(80);
 
 bool attackActive = false;
@@ -4292,9 +4292,7 @@ static void deautherOpenTarget(int index) {
   drawAttackScreen();
 }
 
-extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32_t arg3) {
-    return 0;
-}
+// ieee80211_raw_frame_sanity_check is built-in to libnet80211.a in esp32s3-libs
 
 void wsl_bypasser_send_raw_frame(const uint8_t *frame_buffer, int size) {
     esp_err_t res = esp_wifi_80211_tx(WIFI_IF_AP, frame_buffer, size, false);

@@ -10,6 +10,9 @@
 #include <Wire.h>
 #include <EEPROM.h>
 #include <Preferences.h>
+#include <FS.h>
+using fs::FS;
+using fs::File;
 #include <WebServer.h>
 #include <DNSServer.h>
 #include <RCSwitch.h>
@@ -31,8 +34,15 @@
 #include "BleCompat.h"
 
 #include "esp_bt.h"
+#if defined(SOC_BT_CLASSIC_SUPPORTED) && SOC_BT_CLASSIC_SUPPORTED
 #include "esp_bt_main.h"
 #include "esp_gap_bt_api.h"
+#else
+#ifndef ESP_BD_ADDR_T_DEFINED
+#define ESP_BD_ADDR_T_DEFINED
+typedef uint8_t esp_bd_addr_t[6];
+#endif
+#endif
 
 #include "arduinoFFT.h"
 #include "ELECHOUSE_CC1101_SRC_DRV.h"

@@ -23,7 +23,11 @@ TFT_eSPI tft = TFT_eSPI();
 PCF8574 pcf(PCF8574_I2C_ADDR);
 
 void setBrightness(uint8_t value) {
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+  ledcWriteChannel(PWM_CHANNEL, value);
+#else
   ledcWrite(PWM_CHANNEL, value);
+#endif
 }
 
 bool feature_exit_requested = false;
@@ -4517,18 +4521,24 @@ void setup() {
   tft.init();
   tft.setRotation(TFT_ROTATION);
 
+#if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
+  ledcAttachChannel(BACKLIGHT_PIN, PWM_FREQ, PWM_RESOLUTION, PWM_CHANNEL);
+#else
   ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
   ledcAttachPin(BACKLIGHT_PIN, PWM_CHANNEL);
+#endif
   setBrightness(80);
 
   applyThemeToPalette(settings().theme);
 
   tft.fillScreen(TFT_BLACK);
 
-  loading(100, UI_ICON, 0, 0, 2, true);
+  // 1. Iconic Fire Skull Loading Animation (140x180 pulsing orange, zero-flicker)
+  loading(50, CYBER_ORANGE, 0, 0, 2, true);
 
-  tft.fillScreen(TFT_BLACK);
-  displayLogo(TFT_WHITE, 500);
+  // 2. Full R3X Boot Logo (140x210 with Little-Sufi creator credits)
+  displayLogo(CYBER_ORANGE, 2000);
+  delay(500);
 
   initSDCard();
 
@@ -4541,6 +4551,9 @@ void setup() {
 #endif
   applyThemeToPalette(settings().theme);
   setBrightness(settings().brightness);
+
+  // 3. Tactical Health Check Diagnostic Screen
+  System::showDiagnosticScreen(System::performHealthCheck());
 
 #if HAS_PCF8574_BUTTONS
   if (!initPcf8574Buttons()) {

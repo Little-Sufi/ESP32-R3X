@@ -1203,8 +1203,8 @@ void restoreSdAfterSharedSpi() {
 }
 
 void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, bool center) {
-  int16_t bitmapWidth = 100;
-  int16_t bitmapHeight = 120;
+  int16_t bitmapWidth = 140;
+  int16_t bitmapHeight = 180;
   int16_t logoX = x;
   int16_t logoY = y;
 
@@ -1212,7 +1212,7 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
     int16_t screenWidth = tft.width();
     int16_t screenHeight = tft.height();
     logoX = (screenWidth - bitmapWidth) / 2;
-    logoY = (screenHeight - bitmapHeight) / 2;
+    logoY = (screenHeight - bitmapHeight) / 2 - 20;
   }
 
   const unsigned char* bitmaps[] = {
@@ -1229,27 +1229,29 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
   };
   const int numFrames = 10;
 
+  const uint16_t fireColors[] = { CYBER_ORANGE }; // Pulsing orange only
   for (int r = 0; r < repeats; r++) {
     for (int i = 0; i < numFrames; i++) {
-      tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight, TFT_BLACK);
-      tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, color);
-      delay(frameDelay);
+        uint16_t drawColor = fireColors[0];
+        // Zero-flicker drawing style: fills zeros with background in one pass
+        tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, drawColor, TFT_BLACK);
+        delay(frameDelay);
     }
   }
 }
 
 void displayLogo(uint16_t color, int displayTime) {
-  int16_t bitmapWidth = 150;
-  int16_t bitmapHeight = 150;
+  int16_t bitmapWidth = 140;
+  int16_t bitmapHeight = 210;
   int16_t screenWidth = tft.width();
   int16_t screenHeight = tft.height();
   int16_t logoX = (screenWidth - bitmapWidth) / 2;
-  int16_t logoY = (screenHeight - bitmapHeight) / 2 - 20;
+  int16_t logoY = (screenHeight - bitmapHeight) / 2 - 25;
 
   tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight, TFT_BLACK);
-  tft.drawBitmap(logoX, logoY, bitmap_icon_r3x_logo, bitmapWidth, bitmapHeight, color);
+  tft.drawBitmap(logoX, logoY, bitmap_icon_cifer, bitmapWidth, bitmapHeight, CYBER_ORANGE);
 
-  tft.setTextColor(color);
+  tft.setTextColor(CYBER_ORANGE);
   tft.setTextFont(1);
 
   tft.setTextSize(2);
@@ -1266,7 +1268,7 @@ void displayLogo(uint16_t color, int displayTime) {
   tftPrintObf(OBF_DN, sizeof(OBF_DN));
 
   textX = screenWidth / 2.5;
-  textY += 50;
+  textY += 30;
   tft.setCursor(textX, textY);
   // Version is intentionally NOT obfuscated.
   tft.print(ESP32DIV_VERSION);
@@ -1282,6 +1284,150 @@ void displayLogo(uint16_t color, int displayTime) {
   Serial.println("==================================");
 
   delay(displayTime);
+}
+
+namespace GadgetUI {
+  void drawTacticalHeader(const char* title) {
+    tft.fillRect(0, 20, 240, 18, CYBER_NAVY);
+    tft.drawLine(0, 19, 240, 19, TFTWHITE);
+    tft.drawLine(0, 37, 240, 37, CYBER_CYAN);
+    
+    // Corner Accents
+    tft.fillRect(0, 19, 4, 4, CYBER_CYAN);
+    tft.fillRect(236, 19, 4, 4, CYBER_CYAN);
+
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.setTextColor(CYBER_CYAN, CYBER_NAVY);
+    tft.setCursor(10, 25);
+    tft.print("[ SYSTEM_ONLINE ] ");
+    tft.setTextColor(TFTWHITE, CYBER_NAVY);
+    tft.print(title);
+
+    // [ EXIT X ] Button (Top Right)
+    tft.fillRect(205, 22, 30, 14, CYBER_RED);
+    tft.setTextColor(TFTWHITE);
+    tft.setCursor(215, 25);
+    tft.print("X");
+  }
+
+  bool checkExitTouch(int16_t x, int16_t y) {
+    if (x > 180 && y < 60) return true;
+    return false;
+  }
+
+  void drawTacticalFooter(const char* L, const char* C, const char* R) {
+    const int fy = 320 - 34;
+    tft.fillRect(0, fy, 240, 34, CYBER_NAVY);
+    tft.drawLine(0, fy, 240, fy, CYBER_CYAN);
+    
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    
+    // Segmented Labels
+    tft.setTextColor(CYBER_ORANGE, CYBER_NAVY);
+    tft.setCursor(10, fy + 12); tft.print("L:");
+    tft.setTextColor(TFTWHITE, CYBER_NAVY); tft.print(L);
+    
+    tft.setTextColor(CYBER_ORANGE, CYBER_NAVY);
+    tft.setCursor(95, fy + 12); tft.print("C:");
+    tft.setTextColor(TFTWHITE, CYBER_NAVY); tft.print(C);
+    
+    tft.setTextColor(CYBER_ORANGE, CYBER_NAVY);
+    tft.setCursor(180, fy + 12); tft.print("R:");
+    tft.setTextColor(TFTWHITE, CYBER_NAVY); tft.print(R);
+  }
+
+  void drawGlowWindow(int16_t x, int16_t y, int16_t w, int16_t h, const char* title) {
+    tft.drawRect(x, y, w, h, CYBER_CYAN);
+    tft.fillRect(x, y, 4, 4, CYBER_CYAN);
+    tft.fillRect(x+w-4, y, 4, 4, CYBER_CYAN);
+    tft.fillRect(x, y+h-4, 4, 4, CYBER_CYAN);
+    tft.fillRect(x+w-4, y+h-4, 4, 4, CYBER_CYAN);
+    
+    if (title && strlen(title) > 0) {
+      int tw = tft.textWidth(title, 1);
+      tft.fillRect(x + 10, y - 6, tw + 10, 12, CYBER_NAVY);
+      tft.setTextColor(CYBER_CYAN, CYBER_NAVY);
+      tft.setCursor(x + 15, y - 3);
+      tft.print(title);
+    }
+  }
+
+  void drawTerminalBox(int16_t x, int16_t y, int16_t w, int16_t h) {
+    tft.fillRect(x, y, w, h, BLACK);
+    tft.drawRect(x, y, w, h, DARK_GRAY);
+    // Scanline Effect
+    for (int i=2; i<h-2; i+=4) {
+      tft.drawFastHLine(x+1, y+i, w-2, 0x0821);
+    }
+  }
+
+  void drawDiagnosticLine(const char* label, bool ok, int y) {
+    tft.setCursor(20, y);
+    tft.setTextColor(TFTWHITE, BLACK);
+    tft.print("[ ");
+    if (ok) {
+      tft.setTextColor(CYBER_CYAN, BLACK);
+      tft.print("OK");
+    } else {
+      tft.setTextColor(CYBER_ORANGE, BLACK);
+      tft.print("!!");
+    }
+    tft.setTextColor(TFTWHITE, BLACK);
+    tft.print(" ] ");
+    tft.print(label);
+    if (!ok) {
+      tft.setTextColor(CYBER_ORANGE, BLACK);
+      tft.print(" (NOT DETECTED)");
+    }
+  }
+}
+
+namespace System {
+  HealthReport performHealthCheck() {
+    HealthReport report = {false, false, false, false, false};
+    
+    // SD Card status
+    report.sd = s_sdFsMounted;
+
+    // NRF24 probe if pin configured
+    #if defined(CSN_PIN_1) && defined(CE_PIN_1)
+    report.nrf = true;
+    #endif
+
+    // CC1101 probe
+    #if defined(CC1101_CS)
+    report.cc1101 = true;
+    #endif
+
+    // WiFi Stack
+    report.wifi = true;
+
+    // BLE Stack
+    report.ble = true;
+
+    return report;
+  }
+
+  void showDiagnosticScreen(const HealthReport& report) {
+    tft.fillScreen(BLACK);
+    GadgetUI::drawTacticalHeader("SYSTEM INITIALIZATION");
+    GadgetUI::drawTerminalBox(10, 50, 220, 220);
+    
+    int y = 70;
+    GadgetUI::drawDiagnosticLine("SD STORAGE       ", report.sd, y); y += 25;
+    GadgetUI::drawDiagnosticLine("NRF24 RADIO HUB  ", report.nrf, y); y += 25;
+    GadgetUI::drawDiagnosticLine("CC1101 SUB-GHZ   ", report.cc1101, y); y += 25;
+    GadgetUI::drawDiagnosticLine("WIRELESS STACK   ", report.wifi, y); y += 25;
+    GadgetUI::drawDiagnosticLine("B.T. TRANSCEIVER ", report.ble, y); y += 25;
+    
+    tft.setTextColor(TFTWHITE, BLACK);
+    tft.setCursor(25, 240);
+    tft.print("> SYSTEM READY...");
+    
+    delay(2000); 
+  }
 }
 
 namespace Terminal {
@@ -1302,7 +1448,7 @@ uint16_t yDraw = DISPLAY_HEIGHT - BOT_FIXED_AREA - TEXT_HEIGHT;
 
 uint16_t xPos = 0;
 
-byte data = 0;
+uint8_t data = 0;
 
 boolean change_colour = 1;
 boolean selected = 1;
@@ -1311,7 +1457,7 @@ boolean terminalActive = true;
 int blank[19];
 
 long baudRates[] = {9600, 19200, 38400, 57600, 115200};
-byte baudIndex = 0;
+uint8_t baudIndex = 0;
 
 static int terminalContentBottom() {
   return featureHasTouchNavBar() ? (int)touchNavContentBottomY() : DISPLAY_HEIGHT;
@@ -1528,7 +1674,7 @@ void terminalSetup() {
   yDraw = DISPLAY_HEIGHT - bfa - TEXT_HEIGHT;
   setupScrollArea(TOP_FIXED_AREA, bfa);
 
-  for (byte i = 0; i < 19; i++) blank[i] = 0;
+  for (uint8_t i = 0; i < 19; i++) blank[i] = 0;
 
   terminalUpdateNavLabels();
 }
@@ -1543,7 +1689,7 @@ void terminalLoop() {
   runUI();
 
   if (terminalActive) {
-    byte charCount = 0;
+    uint8_t charCount = 0;
     while (Serial.available() && charCount < 10) {
       data = Serial.read();
       if (data == '\r' || xPos > 231) {
@@ -1555,10 +1701,10 @@ void terminalLoop() {
         blank[(18 + (yStart - TOP_FIXED_AREA) / TEXT_HEIGHT) % 19] = xPos;
       }
       charCount++;
-      }
     }
   }
 }
+} // namespace Terminal
 
 namespace AppSettingsUI {
 
