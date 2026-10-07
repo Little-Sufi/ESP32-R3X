@@ -2,10 +2,6 @@
 build/
 .pio/
 .vscode/
-*.bin
-*.elf
-*.map
-*.hex
 *.tmp
 *.bak
 *.log

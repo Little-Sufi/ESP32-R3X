@@ -1,20 +1,17 @@
 #include <SD.h>
 #include <SPI.h>
+#include <algorithm>
+#include <cmath>
+#include <vector>
+#include "driver/gpio.h"
 #include "Touchscreen.h"
 #include "config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "icon.h"
+#include "gps.h"
 #include "shared.h"
 #include "utils.h"
-
-// External hardware objects defined in other modules
-extern ELECHOUSE_CC1101 ELECHOUSE_cc1101;
-namespace BleJammer {
-  extern RF24 radio1;
-  extern RF24 radio2;
-  extern RF24 radio3;
-}
 
 
 bool notificationVisible = false;
@@ -23,6 +20,39 @@ static int notifX, notifY, notifWidth, notifHeight;
 static int closeButtonX, closeButtonY, closeButtonSize = 16;
 static int okButtonX, okButtonY, okButtonWidth = 84, okButtonHeight = 24;
 static int saveButtonX, saveButtonY, saveButtonWidth = 84, saveButtonHeight = 24;
+
+static char s_notifTitleCache[64];
+static char s_notifMsgCache[400];
+static bool s_notifShowSaveCache = false;
+
+/** Wrapped line count for modal text (font 1, size 1 — must match draw path). */
+static int countWrappedNotifLines(const String& msgIn, int innerPixelW) {
+  tft.setTextFont(1);
+  tft.setTextSize(1);
+  String msg = msgIn;
+  msg.trim();
+  int lines = 0;
+  while (msg.length() > 0 && lines < 48) {
+    int lineEnd = msg.length();
+    while (lineEnd > 0 && tft.textWidth(msg.substring(0, lineEnd)) > innerPixelW) {
+      lineEnd--;
+    }
+    if (lineEnd <= 0) {
+      ++lines;
+      break;
+    }
+    if (lineEnd < msg.length()) {
+      const int lastSpace = msg.substring(0, lineEnd).lastIndexOf(' ');
+      if (lastSpace > 0) {
+        lineEnd = lastSpace;
+      }
+    }
+    ++lines;
+    msg = msg.substring(lineEnd);
+    msg.trim();
+  }
+  return lines;
+}
 
 static size_t decodeObfTo(char* out, size_t outSize, const uint8_t* in, size_t inLen, uint8_t key) {
   if (!out || outSize == 0) return 0;
@@ -57,12 +87,53 @@ static inline bool inRect(int x, int y, int rx, int ry, int rw, int rh) {
 }
 
 static void drawNotificationInternal(const char* title, const char* message, bool showSave) {
+    snprintf(s_notifTitleCache, sizeof(s_notifTitleCache), "%s", title ? title : "");
+    snprintf(s_notifMsgCache, sizeof(s_notifMsgCache), "%s", message ? message : "");
+    s_notifShowSaveCache = showSave;
     notificationHasSave = showSave;
 
-    notifWidth = 200;
-    notifHeight = showSave ? 112 : 98;
-    notifX = (240 - notifWidth) / 2;
-    notifY = (320 - notifHeight) / 2;
+    const int scrW = tft.width();
+    const int scrH = tft.height();
+    notifWidth = (scrW > 232) ? 224 : (scrW - 16);
+    if (notifWidth < 160) {
+        notifWidth = 160;
+    }
+
+    const int messageBoxWidth = notifWidth - 10;
+    const int innerTextW = messageBoxWidth - 6;
+    const int lineH = 12;
+    const int footH = showSave ? 40 : 30;
+    const int topBand = 25;
+
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    String msgProbe = message ? String(message) : String("");
+    msgProbe.trim();
+    int lineCount = countWrappedNotifLines(msgProbe, innerTextW);
+    if (lineCount < 2) {
+        lineCount = 2;
+    }
+    const int maxLinesByScreen = (scrH - topBand - footH - 14) / lineH;
+    int useLines = lineCount;
+    if (useLines > maxLinesByScreen) {
+        useLines = maxLinesByScreen > 2 ? maxLinesByScreen : 2;
+    }
+
+    const int messageBoxHeight = 8 + useLines * lineH;
+    notifHeight = topBand + messageBoxHeight + footH;
+    if (notifHeight > scrH - 8) {
+        notifHeight = scrH - 8;
+        const int availBody = notifHeight - topBand - footH;
+        useLines = (availBody - 8) / lineH;
+        if (useLines < 2) {
+            useLines = 2;
+        }
+    }
+    notifX = (scrW - notifWidth) / 2;
+    notifY = (scrH - notifHeight) / 2;
+    if (notifY < 4) {
+        notifY = 4;
+    }
 
     tft.fillRect(notifX, notifY, notifWidth, notifHeight, LIGHT_GRAY);
     tft.drawRect(notifX, notifY, notifWidth, notifHeight, DARK_GRAY);
@@ -82,27 +153,29 @@ static void drawNotificationInternal(const char* title, const char* message, boo
 
     int messageBoxX = notifX + 5;
     int messageBoxY = notifY + 25;
-    int messageBoxWidth = notifWidth - 10;
-    int messageBoxHeight = notifHeight - 25 - 30;
-    tft.fillRect(messageBoxX, messageBoxY, messageBoxWidth, messageBoxHeight, WHITE);
+    const int messageBoxDrawH = notifHeight - topBand - footH;
+    tft.fillRect(messageBoxX, messageBoxY, messageBoxWidth, messageBoxDrawH, WHITE);
     tft.setTextColor(BLACK, WHITE);
 
     {
-      const int lineH = 12;
-      const int maxY = messageBoxY + messageBoxHeight - lineH;
+      const int maxY = messageBoxY + messageBoxDrawH - lineH;
       String msg = message ? String(message) : String("");
       msg.trim();
       int cursorX = messageBoxX + 3;
       int cursorY = messageBoxY + 4;
       while (msg.length() > 0 && cursorY <= maxY) {
         int lineEnd = msg.length();
-        while (lineEnd > 0 && tft.textWidth(msg.substring(0, lineEnd)) > (messageBoxWidth - 6)) {
+        while (lineEnd > 0 && tft.textWidth(msg.substring(0, lineEnd)) > innerTextW) {
           lineEnd--;
         }
-        if (lineEnd <= 0) break;
+        if (lineEnd <= 0) {
+          break;
+        }
         if (lineEnd < msg.length()) {
           int lastSpace = msg.substring(0, lineEnd).lastIndexOf(' ');
-          if (lastSpace > 0) lineEnd = lastSpace;
+          if (lastSpace > 0) {
+            lineEnd = lastSpace;
+          }
         }
         tft.setCursor(cursorX, cursorY);
         tft.print(msg.substring(0, lineEnd));
@@ -111,7 +184,7 @@ static void drawNotificationInternal(const char* title, const char* message, boo
         cursorY += lineH;
       }
 
-      if (msg.length() > 0 && cursorY > (messageBoxY + 4)) {
+      if (msg.length() > 0) {
         tft.setCursor(cursorX, maxY);
         tft.print("...");
       }
@@ -167,11 +240,19 @@ void showNotification(const char* title, const char* message) {
 }
 
 void hideNotification() {
-    tft.fillRect(notifX, notifY, notifWidth, notifHeight, BLACK);
+    applyThemeToPalette(settings().theme);
+    tft.fillRect(notifX, notifY, notifWidth, notifHeight, UI_BG);
     notificationVisible = false;
 }
 
 bool isNotificationVisible() { return notificationVisible; }
+
+void notificationRedrawIfVisible() {
+    if (!notificationVisible) {
+        return;
+    }
+    drawNotificationInternal(s_notifTitleCache, s_notifMsgCache, s_notifShowSaveCache);
+}
 
 NotificationAction notificationHandleTouch(int x, int y) {
   if (!notificationVisible) return NotificationAction::None;
@@ -245,14 +326,14 @@ static inline uint16_t btnBorder(ButtonStyle style, bool disabled) {
 }
 
 static inline uint16_t btnText(ButtonStyle style, bool disabled) {
-  if (disabled) return UI_LABLE;
+  if (disabled) return UI_TEXT;
 
   switch (style) {
-    case ButtonStyle::Secondary: return WHITE;
+    case ButtonStyle::Secondary: return UI_ICON;
     case ButtonStyle::Primary:
     case ButtonStyle::Danger:    return FEATURE_BG;
   }
-  return WHITE;
+  return UI_ICON;
 }
 
 void drawFooterBg() {
@@ -343,6 +424,28 @@ void layoutFooter1(Button& btn, const char* label, ButtonStyle style, bool disab
   btn = {(int16_t)x,(int16_t)y,(int16_t)w,(int16_t)BTN_H,label,style,disabled};
 }
 
+void layoutFooter5(Button (&btns)[5],
+                   const char* l0, ButtonStyle s0,
+                   const char* l1, ButtonStyle s1,
+                   const char* l2, ButtonStyle s2,
+                   const char* l3, ButtonStyle s3,
+                   const char* l4, ButtonStyle s4,
+                   bool d0, bool d1, bool d2, bool d3, bool d4) {
+  int availW = tft.width() - 2*PAD_X;
+  int w = (availW - 4*GAP_X) / 5;
+  int y = tft.height() - FOOTER_H + (FOOTER_H - BTN_H)/2;
+  int x0 = PAD_X;
+  int x1 = x0 + w + GAP_X;
+  int x2 = x1 + w + GAP_X;
+  int x3 = x2 + w + GAP_X;
+  int x4 = x3 + w + GAP_X;
+  btns[0] = {(int16_t)x0,(int16_t)y,(int16_t)w,(int16_t)BTN_H,l0,s0,d0};
+  btns[1] = {(int16_t)x1,(int16_t)y,(int16_t)w,(int16_t)BTN_H,l1,s1,d1};
+  btns[2] = {(int16_t)x2,(int16_t)y,(int16_t)w,(int16_t)BTN_H,l2,s2,d2};
+  btns[3] = {(int16_t)x3,(int16_t)y,(int16_t)w,(int16_t)BTN_H,l3,s3,d3};
+  btns[4] = {(int16_t)x4,(int16_t)y,(int16_t)w,(int16_t)BTN_H,l4,s4,d4};
+}
+
 int hit(const Button* btns, int n, int x, int y) {
   for (int i = 0; i < n; ++i) {
     const auto& b = btns[i];
@@ -359,172 +462,92 @@ float lastBatteryVoltage = 0.0;
 bool sdCardPresent = false;
 bool lastSdCardState = false;
 
-// Battery voltage calculation constants (already defined in shared.h via BATTERY_VDIV_R1/R2)
-// but kept locally for backward compatibility with existing utility functions.
-const float R1 = BATTERY_VDIV_R1;
-const float R2 = BATTERY_VDIV_R2;
+static TaskHandle_t statusBarTaskHandle = nullptr;
+static volatile bool statusBarDirty = true;
+static constexpr uint32_t kStatusBarWardBlinkHalfMs = 900;
 
-float readBatteryVoltage() {
-  static bool adcInit = false;
-  if (!adcInit) {
-    analogReadResolution(12);
-    adcInit = true;
+void requestStatusBarRedraw() {
+  statusBarDirty = true;
+}
+
+const float R1 = 100000.0;
+const float R2 = 100000.0;
+
+float readBatteryVoltage()
+{
+  static bool adcInitialized = false;
+
+  if (!adcInitialized)
+  {
+    analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+    adcInitialized = true;
   }
 
-  // S3 Specific: Ensure ADC1 lock is handled by adding a small delay 
-  // and ensuring we don't spam it.
-  const int sampleCount = 15;
-  long sum = 0;
+  const int sampleCount = 16;
+  uint32_t sum = 0;
 
-  for (int i = 0; i < sampleCount; i++) {
-    sum += analogRead(BATTERY_PIN);
-    delay(1);
+  for (int i = 0; i < sampleCount; i++)
+  {
+    sum += analogReadMilliVolts(BATTERY_ADC_PIN);
+    delayMicroseconds(500);
   }
 
-  float averageADC = sum / (float)sampleCount;
-  // ESP32-S3 ADC is non-linear, but for battery 3.0V-4.2V with 1/2 divider (1.5V-2.1V), 
-  // it's relatively linear.
-  float pinVoltage = (averageADC / 4095.0f) * 3.3f;
-  float voltage = pinVoltage * ((R1 + R2) / R2);
+  float avgMv = sum / (float)sampleCount;
 
-  return voltage;
+  return (avgMv / 1000.0f) * 2.0f;
 }
 
 float readInternalTemperature() {
-  return temperatureRead();
+  float temperature = temperatureRead();
+  return temperature;
 }
 
 void updateSdCardStatus() {
+
+#ifdef SD_CD
   bool cardDetected = !digitalRead(SD_CD);
+#else
+  bool cardDetected = true;
+#endif
+
   if (cardDetected != lastSdCardState) {
     sdCardPresent = cardDetected;
     lastSdCardState = cardDetected;
+
+    Serial.println(sdCardPresent ? "SD Card detected" : "SD Card removed");
+    requestStatusBarRedraw();
   }
 }
 
-/*──────────────────── GadgetUI Implementation ────────────────────*/
-namespace GadgetUI {
-  void drawTacticalHeader(const char* title) {
-    // Top bar with military aesthetic
-    tft.fillRect(0, 0, 240, 22, CYBER_NAVY);
-    tft.drawFastHLine(0, 21, 240, CYBER_CYAN);
-    tft.drawFastHLine(0, 22, 240, 0x0101); // Subtle shadow
-    
-    // Decorative corner brackets
-    tft.drawFastVLine(0, 0, 10, CYBER_CYAN);
-    tft.drawFastVLine(239, 0, 10, CYBER_CYAN);
-    tft.drawFastHLine(0, 0, 10, CYBER_CYAN);
-    tft.drawFastHLine(230, 0, 10, CYBER_CYAN);
-
-    tft.setTextFont(1);
-    tft.setTextSize(1);
-    tft.setTextColor(CYBER_CYAN, CYBER_NAVY);
-    tft.setCursor(12, 6);
-    tft.print("SYS_OP // ");
-    tft.setTextColor(TFTWHITE, CYBER_NAVY);
-    tft.print(title);
-
-    // Decorative "Encryption Level" or similar
-    tft.setTextColor(CYBER_GRAY, CYBER_NAVY);
-    tft.setCursor(170, 6);
-    tft.print("AES-256");
-
-    // Exit Button [X]
-    tft.fillRect(215, 2, 22, 18, CYBER_RED);
-    tft.setTextColor(TFTWHITE);
-    tft.setCursor(222, 6);
-    tft.print("X");
+static bool statusBarBatteryMeaningfulChange(int newPct, int oldPct, bool force) {
+  if (force || oldPct == -1) {
+    return true;
   }
-
-  bool checkExitTouch(int16_t x, int16_t y) {
-    // Exit button is top right
-    if (x > 210 && y < 25) return true;
-    return false;
+  if (newPct <= 25 || oldPct <= 25) {
+    return newPct != oldPct;
   }
-
-  void drawTacticalFooter(const char* L, const char* C, const char* R) {
-    const int fy = 320 - 34;
-    tft.fillRect(0, fy, 240, 34, 0x0000);
-    tft.drawFastHLine(0, fy, 240, CYBER_GRAY);
-    
-    // Segmented boxes for buttons
-    int bw = 78;
-    int bh = 24;
-    int by = fy + 5;
-    
-    auto drawSegment = [&](int x, const char* tag, const char* val, uint16_t color) {
-      tft.drawRect(x, by, bw, bh, CYBER_GRAY);
-      tft.fillRect(x, by, 3, bh, color);
-      tft.setTextFont(1);
-      tft.setTextColor(color, 0x0000);
-      tft.setCursor(x + 8, by + 7);
-      tft.print(tag);
-      tft.setTextColor(TFTWHITE, 0x0000);
-      tft.setCursor(x + 22, by + 7);
-      tft.print(val);
-    };
-
-    drawSegment(4, "L:", L, CYBER_ORANGE);
-    drawSegment(81, "C:", C, CYBER_CYAN);
-    drawSegment(158, "R:", R, CYBER_GREEN);
-  }
-
-  void drawGlowWindow(int16_t x, int16_t y, int16_t w, int16_t h, const char* title) {
-    // Tactical window with glowing corners and scanlines
-    tft.drawRect(x, y, w, h, CYBER_GRAY);
-    
-    // Corner brackets
-    uint16_t accent = CYBER_CYAN;
-    int cl = 8;
-    tft.drawFastHLine(x, y, cl, accent); tft.drawFastVLine(x, y, cl, accent);
-    tft.drawFastHLine(x+w-cl, y, cl, accent); tft.drawFastVLine(x+w-1, y, cl, accent);
-    tft.drawFastHLine(x, y+h-1, cl, accent); tft.drawFastVLine(x, y+h-cl, cl, accent);
-    tft.drawFastHLine(x+w-cl, y+h-1, cl, accent); tft.drawFastVLine(x+w-1, y+h-cl, cl, accent);
-    
-    if (title && strlen(title) > 0) {
-      tft.fillRect(x + 10, y - 8, tft.textWidth(title) + 10, 12, 0x0000);
-      tft.setTextColor(accent, 0x0000);
-      tft.setCursor(x + 15, y - 6);
-      tft.print(title);
-    }
-    
-    // Subtle grid/scanlines inside
-    for (int i = y + 4; i < y + h - 4; i += 8) {
-      tft.drawFastHLine(x + 2, i, w - 4, 0x0821);
-    }
-  }
-
-  void drawTerminalBox(int16_t x, int16_t y, int16_t w, int16_t h) {
-    tft.fillRect(x, y, w, h, 0x0000);
-    tft.drawRect(x, y, w, h, CYBER_GRAY);
-    // Grid pattern
-    for (int gx = x; gx < x+w; gx += 20) tft.drawFastVLine(gx, y, h, 0x0842);
-    for (int gy = y; gy < y+h; gy += 20) tft.drawFastHLine(x, gy, w, 0x0842);
-  }
-
-  void drawDiagnosticLine(const char* label, bool ok, int y) {
-    tft.setCursor(20, y);
-    tft.setTextColor(TFTWHITE, TFT_BLACK);
-    tft.print("[ ");
-    if (ok) {
-      tft.setTextColor(CYBER_GREEN, TFT_BLACK);
-      tft.print("READY");
-    } else {
-      tft.setTextColor(CYBER_RED, TFT_BLACK);
-      tft.print("ERROR");
-    }
-    tft.setTextColor(TFTWHITE, TFT_BLACK);
-    tft.print(" ] >> ");
-    tft.print(label);
-  }
+  const int d = newPct - oldPct;
+  return (d >= 3 || d <= -3);
 }
 
-void drawStatusBar(float batteryVoltage, bool forceUpdate) {
-  int barHeight = 20;
+static int statusBarTempBand(float t) {
+  if (fabs(static_cast<double>(t) - 53.33) < 0.51) {
+    return 1;
+  }
+  if (t > 55.f) {
+    return 2;
+  }
+  return 0;
+}
+
+void drawStatusBar(float batteryVoltage, bool forceUpdate, bool bottomSeparator) {
   static int lastBatteryPercentage = -1;
-  static int lastWifiDevices      = -1;
-  static int lastBleDevices       = -1;
-  static String lastDisplayedTime = "";
+  static int lastWifiHalf          = -100000;
+  static int lastBleHalf           = -100000;
+  static int lastTempBand          = -100;
+  static int lastSdSnap            = -1;
+  static bool lastWardGpsIcon      = false;
+  static uint32_t lastWardBlinkPhase = 0;
 
   int batteryPercentage = ::map(batteryVoltage * 100, 300, 420, 0, 100);
   batteryPercentage = constrain(batteryPercentage, 0, 100);
@@ -535,27 +558,65 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
   wifiDevices = WifiScan::getLastCount();
   bleDevices  = BleScan::getLastCount();
 
-  float internalTemp = readInternalTemperature();
+  const int wifiHalf = wifiDevices / 2;
+  const int bleHalf  = bleDevices / 2;
 
-  if (batteryPercentage != lastBatteryPercentage ||
-      wifiDevices      != lastWifiDevices      ||
-      bleDevices       != lastBleDevices       ||
-      forceUpdate) {
-    tft.fillRect(0, 0, tft.width(), barHeight, UI_LABLE);
-    tft.drawLine(0, barHeight - 1, tft.width(), barHeight - 1, ORANGE);
+  const bool wardGpsIcon = GpsWardriver::statusBarGpsIconActive();
+  const uint32_t wardBlinkPhase =
+      wardGpsIcon ? (millis() / kStatusBarWardBlinkHalfMs) : 0u;
+  const bool wardSatVisible =
+      wardGpsIcon && ((wardBlinkPhase & 1u) == 0u);
 
-    // Battery Icon shifted slightly left since back button is gone
-    int bx = 6; // Battery X
+  const float internalTemp = readInternalTemperature();
+  const int tempBand         = statusBarTempBand(internalTemp);
+  const int sdSnap           = sdCardPresent ? 1 : 0;
+
+  const bool battCh =
+      statusBarBatteryMeaningfulChange(batteryPercentage, lastBatteryPercentage, forceUpdate);
+  const bool wardBlinkOnly =
+      !forceUpdate && wardGpsIcon && lastWardGpsIcon &&
+      (wardBlinkPhase != lastWardBlinkPhase) && !battCh && wifiHalf == lastWifiHalf &&
+      bleHalf == lastBleHalf && tempBand == lastTempBand && sdSnap == lastSdSnap;
+
+  if (wardBlinkOnly) {
+    constexpr int kBarH   = 20;
+    constexpr int kY      = 4;
+    constexpr int kIconY  = kY - 2;
+    constexpr int kIconW  = 16;
+    constexpr int kGap    = 3;
+    constexpr int kBleIx  = 130;
+    constexpr int kBleDrawX = kBleIx + 25;
+    const int wardGpsX    = kBleDrawX - kGap - kIconW;
+    if (wardSatVisible) {
+      tft.drawBitmap(wardGpsX, kIconY, bitmap_icon_satellite, kIconW, kIconW, TFT_ORANGE);
+    } else {
+      tft.fillRect(wardGpsX, kIconY, kIconW, kIconW, UI_LABLE);
+    }
+    if (bottomSeparator) {
+      tft.drawFastHLine(0, kBarH - 1, tft.width(), TFT_WHITE);
+    }
+    lastWardBlinkPhase = wardBlinkPhase;
+    return;
+  }
+
+  if (battCh || wifiHalf != lastWifiHalf || bleHalf != lastBleHalf || tempBand != lastTempBand ||
+      sdSnap != lastSdSnap || wardGpsIcon != lastWardGpsIcon ||
+      (wardGpsIcon && wardBlinkPhase != lastWardBlinkPhase) || forceUpdate) {
+    int barHeight = 20;
+    int x = 7;
     int y = 4;
-    tft.drawRoundRect(bx, y, 22, 10, 2, TFT_WHITE);
-    tft.fillRect(bx + 22, y + 3, 2, 4, TFT_WHITE);
+
+    tft.fillRect(0, 0, tft.width(), barHeight, UI_LABLE);
+
+    tft.drawRoundRect(x, y, 22, 10, 2, TFT_WHITE);
+    tft.fillRect(x + 22, y + 3, 2, 4, TFT_WHITE);
 
     int batteryLevelWidth = ::map(batteryPercentage, 0, 100, 0, 20);
-    uint16_t batteryColor = (batteryPercentage > 20) ? TFT_GREEN : TFT_RED;
-    tft.fillRoundRect(bx + 2, y + 2, batteryLevelWidth, 6, 1, batteryColor);
+    uint16_t batteryColor = (batteryPercentage > 20) ? GREEN : TFT_RED;
+    tft.fillRoundRect(x + 2, y + 2, batteryLevelWidth, 6, 1, batteryColor);
 
-    tft.setCursor(bx + 30, y + 2);
-    tft.setTextColor(TFT_GREEN, UI_LABLE);
+    tft.setCursor(x + 30, y + 2);
+    tft.setTextColor(GREEN, UI_LABLE);
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.print(String(batteryPercentage) + "%");
@@ -574,7 +635,13 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     int clearWidth = tft.width() - bleIconX;
     tft.fillRect(bleIconX, 0, clearWidth, barHeight, UI_LABLE);
 
-    uint16_t wifiColor = (wifiDevices > 0) ? TFT_GREEN : TFT_WHITE;
+    const int bleDrawX = bleIconX + 25;
+    if (wardSatVisible) {
+      const int wardGpsX = bleDrawX - gap - iconW;
+      tft.drawBitmap(wardGpsX, iconY, bitmap_icon_satellite, iconW, iconW, TFT_ORANGE);
+    }
+
+    uint16_t wifiColor = (wifiDevices > 0) ? GREEN : TFT_WHITE;
     uint16_t bleColor  = (bleDevices  > 0) ? TFT_CYAN  : TFT_WHITE;
 
     int wifiStrength = 0;
@@ -587,14 +654,14 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     int wifiY = y + 11;
 
     for (int i = 0; i < 4; i++) {
-      int barHeight = (i + 1) * 3;
-      int barWidth  = 4;
-      int barX      = wifiX + i * 6;
+      const int sigBarH = (i + 1) * 3;
+      const int barWidth  = 4;
+      const int barX      = wifiX + i * 6;
 
       if (wifiStrength > i * 25) {
-        tft.fillRoundRect(barX, wifiY - barHeight, barWidth, barHeight, 1, TFT_GREEN);
+        tft.fillRoundRect(barX, wifiY - sigBarH, barWidth, sigBarH, 1, GREEN);
       } else {
-        tft.drawRoundRect(barX, wifiY - barHeight, barWidth, barHeight, 1, TFT_WHITE);
+        tft.drawRoundRect(barX, wifiY - sigBarH, barWidth, sigBarH, 1, TFT_WHITE);
       }
     }
 
@@ -606,32 +673,82 @@ void drawStatusBar(float batteryVoltage, bool forceUpdate) {
     } else if (internalTemp > 55) {
       tft.drawBitmap(tempIconX + 10, y - 2, bitmap_icon_temp, 16, 16, TFT_RED);
     } else {
-      tft.drawBitmap(tempIconX + 10, y - 2, bitmap_icon_temp, 16, 16, TFT_GREEN);
+      tft.drawBitmap(tempIconX + 10, y - 2, bitmap_icon_temp, 16, 16, GREEN);
     }
 
     if (sdCardPresent) {
-      tft.drawBitmap(sdIconX + 10, y - 2, bitmap_icon_sdcard, 16, 16, TFT_GREEN);
+      tft.drawBitmap(sdIconX + 10, y - 2, bitmap_icon_sdcard, 16, 16, GREEN);
     } else {
       tft.drawBitmap(sdIconX + 10, y - 2, bitmap_icon_nullsdcard, 16, 16, TFT_RED);
     }
 
+    if (bottomSeparator) {
+      tft.drawFastHLine(0, barHeight - 1, tft.width(), TFT_WHITE);
+    }
+
     lastBatteryPercentage = batteryPercentage;
-    lastWifiDevices       = wifiDevices;
-    lastBleDevices        = bleDevices;
+    lastWifiHalf          = wifiHalf;
+    lastBleHalf           = bleHalf;
+    lastTempBand          = tempBand;
+    lastSdSnap            = sdSnap;
+    lastWardGpsIcon       = wardGpsIcon;
+    lastWardBlinkPhase    = wardGpsIcon ? wardBlinkPhase : 0u;
   }
 }
 
-static TaskHandle_t statusBarTaskHandle = nullptr;
-static volatile bool statusBarDirty = true;
-
 static void statusBarTask(void* ) {
-  for (;;) {
+  static int prevBattPct    = -1;
+  static int prevWifiHalf   = -100000;
+  static int prevBleHalf    = -100000;
+  static int prevTempBand   = -100;
+  static int prevSdSnap     = -1;
+  static bool prevWardIcon  = false;
+  static uint32_t prevWardPhase = 0;
 
-    float v = readBatteryVoltage();
+  for (;;) {
     updateSdCardStatus();
+    const float v = readBatteryVoltage();
     currentBatteryVoltage = v;
-    statusBarDirty = true;
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+
+    const int pct = constrain(::map((int)(v * 100.f), 300, 420, 0, 100), 0, 100);
+    const int wifi  = WifiScan::getLastCount();
+    const int ble   = BleScan::getLastCount();
+    const int wifiH = wifi / 2;
+    const int bleH  = ble / 2;
+    const int tBand = statusBarTempBand(readInternalTemperature());
+    const int sdSn  = sdCardPresent ? 1 : 0;
+    const bool ward = GpsWardriver::statusBarGpsIconActive();
+    const uint32_t wPh = ward ? (millis() / kStatusBarWardBlinkHalfMs) : 0u;
+
+    bool need = false;
+    if (statusBarBatteryMeaningfulChange(pct, prevBattPct, false)) {
+      need = true;
+    }
+    if (wifiH != prevWifiHalf || bleH != prevBleHalf) {
+      need = true;
+    }
+    if (tBand != prevTempBand || sdSn != prevSdSnap) {
+      need = true;
+    }
+    if (ward != prevWardIcon) {
+      need = true;
+    }
+    if (ward && wPh != prevWardPhase) {
+      need = true;
+    }
+
+    if (need) {
+      statusBarDirty = true;
+      prevBattPct     = pct;
+      prevWifiHalf    = wifiH;
+      prevBleHalf     = bleH;
+      prevTempBand    = tBand;
+      prevSdSnap      = sdSn;
+      prevWardIcon    = ward;
+      prevWardPhase   = ward ? wPh : 0u;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(400));
   }
 }
 
@@ -648,6 +765,10 @@ void startStatusBarTask() {
   );
 }
 
+void pauseBackgroundRadioTasks() {
+  GpsWardriver::stopBackgroundIfRunning();
+}
+
 void updateStatusBar() {
 
   if (statusBarTaskHandle != nullptr) {
@@ -658,73 +779,432 @@ void updateStatusBar() {
     return;
   }
 
-  unsigned long currentMillis = millis();
-  if (currentMillis - lastStatusBarUpdate > STATUS_BAR_UPDATE_INTERVAL) {
+  const unsigned long currentMillis = millis();
+  const bool wardOn = GpsWardriver::statusBarGpsIconActive();
+  static uint32_t s_noTaskLastWardPhase = UINT32_MAX;
+  const uint32_t wardPh =
+      wardOn ? (currentMillis / kStatusBarWardBlinkHalfMs) : 0u;
+  const bool wardBlinkTick =
+      wardOn && (s_noTaskLastWardPhase == UINT32_MAX || wardPh != s_noTaskLastWardPhase);
+  if (wardOn) {
+    s_noTaskLastWardPhase = wardPh;
+  } else {
+    s_noTaskLastWardPhase = UINT32_MAX;
+  }
+
+  if (currentMillis - lastStatusBarUpdate > STATUS_BAR_UPDATE_INTERVAL || wardBlinkTick) {
     float batteryVoltage = readBatteryVoltage();
     updateSdCardStatus();
-    if (fabs(batteryVoltage - lastBatteryVoltage) > 0.05 || lastBatteryVoltage == 0) {
-      drawStatusBar(batteryVoltage, false);
-      lastBatteryVoltage = batteryVoltage;
-    }
+    currentBatteryVoltage = batteryVoltage;
+    drawStatusBar(batteryVoltage, false);
+    lastBatteryVoltage = batteryVoltage;
     lastStatusBarUpdate = currentMillis;
   }
 }
 
-void initSDCard() {
+#if HAS_PCF8574_BUTTONS
+static uint8_t s_pcf8574Addr = 0;
 
-  initSharedSPI();
-
-  pinMode(SD_CD, INPUT_PULLUP);
-
-  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
-
-  updateSdCardStatus();
+uint8_t getPcf8574Address() {
+  return s_pcf8574Addr;
 }
 
-bool isSDCardAvailable() {
+bool initPcf8574Buttons() {
+  // Prevent I2C bus hangs (no ACK / missing pull-ups) from tripping the task WDT
+  // and rebooting right after the intro on classic ESP32.
+  Wire.begin();
+  Wire.setTimeOut(50);
 
-  #ifdef SD_CD
+  pcf.pinMode(BTN_UP, INPUT_PULLUP);
+  pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
+  pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
+  pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pcf.pinMode(BTN_SELECT, INPUT_PULLUP);
+
+#if PCF8574_AUTO_DETECT
+  for (uint8_t addr = PCF8574_ADDR_MIN; addr <= PCF8574_ADDR_MAX; addr++) {
+    yield();
+    if (pcf.begin(addr)) {
+      s_pcf8574Addr = addr;
+      Serial.printf("[PCF8574] auto-detected at 0x%02X\n", addr);
+      break;
+    }
+  }
+  if (s_pcf8574Addr == 0) {
+    Serial.println("[PCF8574] not found (scanned 0x20-0x27)");
+    return false;
+  }
+#else
+  if (!pcf.begin(PCF8574_I2C_ADDR)) {
+    Serial.printf("[PCF8574] not found at fixed address 0x%02X\n", PCF8574_I2C_ADDR);
+    return false;
+  }
+  s_pcf8574Addr = PCF8574_I2C_ADDR;
+  Serial.printf("[PCF8574] using fixed address 0x%02X\n", s_pcf8574Addr);
+#endif
+
+  return true;
+}
+#else
+uint8_t getPcf8574Address() {
+  return 0;
+}
+
+bool initPcf8574Buttons() {
+  return false;
+}
+#endif
+
+#if TOUCH_SHARES_TFT_SPI
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+static SPIClass s_sdSpi(FSPI);
+#elif defined(CONFIG_IDF_TARGET_ESP32)
+static SPIClass s_sdSpi(VSPI);
+#else
+static SPIClass s_sdSpi(FSPI);
+#endif
+#endif
+
+/** Tracks whether SD.begin() currently owns a live mount on the shared SPI bus. */
+static bool s_sdFsMounted = false;
+
+/** GPIO CS that last mounted SD (-1 = unknown). Tried first to avoid long SD.begin on wrong CS. */
+static int8_t s_sdLastGoodCs = -1;
+
+/** After a failed mount on classic ESP32, do not keep retrying (SD.begin can WDT). */
+static bool s_sdMountGaveUp = false;
+
+void sdRetryMount() {
+  s_sdMountGaveUp = false;
+}
+
+/** Deselect every other SPI slave that shares the SD bus so none holds MISO. */
+static void sdRaiseCsPin(int pin) {
+  if (pin < 0) {
+    return;
+  }
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
+}
+
+static void sdReleaseOtherChipSelects() {
+#if defined(CC1101_CS)
+  sdRaiseCsPin(CC1101_CS);
+#endif
+#if defined(PN532_SS)
+  sdRaiseCsPin(PN532_SS);
+#endif
+#if defined(CSN_PIN_1)
+  sdRaiseCsPin(CSN_PIN_1);
+#endif
+#if defined(CSN_PIN_2)
+  sdRaiseCsPin(CSN_PIN_2);
+#endif
+#if defined(CSN_PIN_3)
+  sdRaiseCsPin(CSN_PIN_3);
+#endif
+  // Scanner bit-bangs CE/CSN on these pins; keep CE low / CSN high after leaving.
+#if defined(CE_PIN_3)
+  pinMode(CE_PIN_3, OUTPUT);
+  digitalWrite(CE_PIN_3, LOW);
+#endif
+}
+
+void sdSpiInit() {
+#if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
+#if TOUCH_SHARES_TFT_SPI
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+#else
+  // On ESP32-S3 (v2), RFID bitbang remaps these pins — reset before reclaim.
+  // On classic ESP32 (v1), SD often shares SPI with TFT_eSPI; gpio_reset_pin
+  // after tft.init() can WDT/reboot during boot SD mount.
+#if BOARD_HAS_ESP32S3
+  gpio_reset_pin((gpio_num_t)SD_SCLK);
+  gpio_reset_pin((gpio_num_t)SD_MISO);
+  gpio_reset_pin((gpio_num_t)SD_MOSI);
+  gpio_reset_pin((gpio_num_t)SD_CS);
+#endif
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+  SPI.setFrequency(4000000);
+#endif
+#endif
+}
+
+bool sdMountChipSelect(uint8_t cs) {
+#if TOUCH_SHARES_TFT_SPI
+  return SD.begin(cs, s_sdSpi, 4000000);
+#else
+  return SD.begin(cs, SPI, 4000000);
+#endif
+}
+
+void initSDCard() {
+
+#ifdef SD_CD
+  pinMode(SD_CD, INPUT_PULLUP);
+#endif
+
+#if !BOARD_HAS_ESP32S3
+  // Classic ESP32: raise CS only. Full SD.begin is deferred — boot mount was
+  // rebooting right after the intro ("3 sd").
+#if defined(SD_CS)
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
+#endif
+  sdReleaseOtherChipSelects();
+  // Block auto-mount from settingsLoad / status bar until an SD feature asks.
+  s_sdMountGaveUp = true;
   updateSdCardStatus();
-  if (!sdCardPresent) return false;
-  #endif
+  return;
+#else
+  restoreSdAfterSharedSpi();
+  updateSdCardStatus();
+#endif
+}
 
-  static bool sdMounted = false;
-  if (sdMounted) {
-
-    if (SD.exists("/")) return true;
-    sdMounted = false;
+static bool sdPinIsOkForSdMount(uint8_t pin) {
+#if defined(SD_CS)
+  if (pin == SD_CS) {
+    return true;
   }
-
-  #ifdef SD_SCLK
-  #ifdef SD_MISO
-  #ifdef SD_MOSI
-  #ifdef SD_CS
-  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
-  #endif
-  #endif
-  #endif
-  #endif
-
-  #ifdef SD_CS
-  if (SD.begin(SD_CS)) { sdMounted = true; return true; }
-  #endif
-
-  #ifdef SD_CS_PIN
-  #ifdef CC1101_CS
-  if (SD_CS_PIN != CC1101_CS) {
-    if (SD.begin(SD_CS_PIN)) { sdMounted = true; return true; }
+#endif
+#if defined(SD_CS_PIN)
+#if defined(CC1101_CS)
+  if (SD_CS_PIN != CC1101_CS && pin == SD_CS_PIN) {
+    return true;
   }
-  #else
-  if (SD.begin(SD_CS_PIN)) { sdMounted = true; return true; }
-  #endif
-  #endif
-
+#else
+  if (pin == SD_CS_PIN) {
+    return true;
+  }
+#endif
+#endif
   return false;
 }
 
+static void sdAddPinUnique(uint8_t* pins, int* nTry, uint8_t p) {
+  if (!sdPinIsOkForSdMount(p)) {
+    return;
+  }
+  for (int j = 0; j < *nTry; j++) {
+    if (pins[j] == p) {
+      return;
+    }
+  }
+  if (*nTry < 3) {
+    pins[(*nTry)++] = p;
+  }
+}
+
+/** SPI must already be SD wiring. Returns true if SD.begin succeeded. */
+static bool sdTryBeginOrder() {
+  uint8_t tryPins[3];
+  int nTry = 0;
+  if (s_sdLastGoodCs >= 0) {
+    sdAddPinUnique(tryPins, &nTry, (uint8_t)s_sdLastGoodCs);
+  }
+#if defined(SD_CS)
+  sdAddPinUnique(tryPins, &nTry, SD_CS);
+#endif
+#if defined(SD_CS_PIN)
+#if defined(CC1101_CS)
+  if (SD_CS_PIN != CC1101_CS) {
+    sdAddPinUnique(tryPins, &nTry, SD_CS_PIN);
+  }
+#else
+  sdAddPinUnique(tryPins, &nTry, SD_CS_PIN);
+#endif
+#endif
+  for (int i = 0; i < nTry; i++) {
+    if (sdMountChipSelect(tryPins[i])) {
+      s_sdLastGoodCs = (int8_t)tryPins[i];
+      return true;
+    }
+  }
+  s_sdLastGoodCs = -1;
+  return false;
+}
+
+/** Soft remount: keep current SPI pinmux. Safe while CC1101/nRF24 still need the bus
+ *  (same SCK/MISO/MOSI as SD on ESP32-R3X). Only raises other chip-selects and remounts FatFS. */
+static bool sdRemountSoft() {
+  sdReleaseOtherChipSelects();
+
+#if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
+#if TOUCH_SHARES_TFT_SPI
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+#else
+  // Do not SPI.end()/gpio_reset here — that tears down CC1101 after SubGHz Init.
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+#endif
+#endif
+
+  SD.end();
+  s_sdFsMounted = false;
+  delay(2);
+  if (sdTryBeginOrder()) {
+    s_sdFsMounted = true;
+#if !TOUCH_SHARES_TFT_SPI
+    // SD.begin() often leaves the bus at 16–40 MHz; CC1101 cannot use that.
+    SPI.setFrequency(4000000);
+#endif
+    return true;
+  }
+  return false;
+}
+
+bool isSDCardAvailable() {
+#ifdef SD_CD
+  updateSdCardStatus();
+  if (!sdCardPresent) {
+    return false;
+  }
+#endif
+
+  // FatFS "exists(/)" can stay true after another feature stole the SPI bus.
+  // cardType() actually talks to the card and catches a dead mount.
+  if (s_sdFsMounted) {
+    if (SD.cardType() != CARD_NONE) {
+      return true;
+    }
+    s_sdFsMounted = false;
+    SD.end();
+  }
+
+#if !BOARD_HAS_ESP32S3
+  if (s_sdMountGaveUp) {
+    return false;
+  }
+#endif
+
+  // Prefer a soft remount so SubGHz (CC1101 on the same SPI pins) stays alive.
+  if (sdRemountSoft()) {
+    return true;
+  }
+
+  // Soft failed — pins may still be in RFID bitbang / Scanner remapped state.
+  // Only do the destructive reclaim when no radio feature owns the bus.
+  if (!feature_active) {
+    restoreSdAfterSharedSpi();
+#if !BOARD_HAS_ESP32S3
+    if (!s_sdFsMounted) {
+      s_sdMountGaveUp = true;
+      Serial.println("[sd] mount failed — will not retry until reboot");
+    }
+#endif
+    return s_sdFsMounted;
+  }
+  return false;
+}
+
+void holdSdInactiveOnSharedSpi() {
+#if defined(SD_CS)
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
+#endif
+#if !TOUCH_SHARES_TFT_SPI
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+  SPI.setFrequency(4000000);
+#endif
+}
+
+void reclaimSharedSpiBus() {
+  // Reset pinmux after RFID bitbang / Scanner remaps, but do NOT SD.begin().
+  // Mounting SD here is what broke SubGHz: SD.begin raises SPI clock and parks
+  // the card on the same MISO line CC1101 needs.
+  sdReleaseOtherChipSelects();
+#if defined(SD_CS)
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
+#endif
+#if defined(CC1101_CS)
+  pinMode(CC1101_CS, OUTPUT);
+  digitalWrite(CC1101_CS, HIGH);
+#endif
+#if defined(PN532_SS)
+  pinMode(PN532_SS, OUTPUT);
+  digitalWrite(PN532_SS, HIGH);
+#endif
+
+  SD.end();
+  s_sdFsMounted = false;
+
+#if !TOUCH_SHARES_TFT_SPI
+  SPI.end();
+#if BOARD_HAS_ESP32S3
+#if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI)
+  gpio_reset_pin((gpio_num_t)SD_SCLK);
+  gpio_reset_pin((gpio_num_t)SD_MISO);
+  gpio_reset_pin((gpio_num_t)SD_MOSI);
+#endif
+  // PN532 software-SPI may have bitbanged these (on ESP32-R3X MOSI/MISO are
+  // swapped vs SD/CC1101). Reset them even when they overlap SD pins.
+#if defined(PN532_SCK)
+  gpio_reset_pin((gpio_num_t)PN532_SCK);
+#endif
+#if defined(PN532_MISO)
+  gpio_reset_pin((gpio_num_t)PN532_MISO);
+#endif
+#if defined(PN532_MOSI)
+  gpio_reset_pin((gpio_num_t)PN532_MOSI);
+#endif
+#if defined(PN532_SS)
+  gpio_reset_pin((gpio_num_t)PN532_SS);
+  pinMode(PN532_SS, OUTPUT);
+  digitalWrite(PN532_SS, HIGH);
+#endif
+#if defined(SD_CS)
+  gpio_reset_pin((gpio_num_t)SD_CS);
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
+#endif
+#if defined(CC1101_CS)
+  gpio_reset_pin((gpio_num_t)CC1101_CS);
+  pinMode(CC1101_CS, OUTPUT);
+  digitalWrite(CC1101_CS, HIGH);
+#endif
+#endif // BOARD_HAS_ESP32S3
+#if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
+#if defined(CC1101_SCK) && defined(CC1101_MISO) && defined(CC1101_MOSI) && defined(CC1101_CS)
+  // Prefer CC1101 CS as SPI SS — same data pins as SD on ESP32-R3X, but matches
+  // what ELECHOUSE SpiStart() will bind on the next Init().
+  SPI.begin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+#else
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+#endif
+  SPI.setDataMode(SPI_MODE0);
+  SPI.setBitOrder(MSBFIRST);
+  SPI.setFrequency(4000000);
+#endif
+#else
+#if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+#endif
+#endif
+  delay(2);
+}
+
+void restoreSdAfterSharedSpi() {
+  // Full reclaim + remount for menu/SD features after leaving SPI radios.
+  reclaimSharedSpiBus();
+  delay(5);
+  if (sdTryBeginOrder()) {
+    s_sdFsMounted = true;
+#if !TOUCH_SHARES_TFT_SPI
+    SPI.setFrequency(4000000);
+#endif
+  }
+  requestStatusBarRedraw();
+}
+
 void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, bool center) {
-  int16_t bitmapWidth = 140;
-  int16_t bitmapHeight = 180;
+  int16_t bitmapWidth = 100;
+  int16_t bitmapHeight = 120;
   int16_t logoX = x;
   int16_t logoY = y;
 
@@ -732,7 +1212,7 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
     int16_t screenWidth = tft.width();
     int16_t screenHeight = tft.height();
     logoX = (screenWidth - bitmapWidth) / 2;
-    logoY = (screenHeight - bitmapHeight) / 2 - 20;
+    logoY = (screenHeight - bitmapHeight) / 2;
   }
 
   const unsigned char* bitmaps[] = {
@@ -749,65 +1229,56 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
   };
   const int numFrames = 10;
 
-  const uint16_t fireColors[] = { ORANGE }; // Pulsing orange only
   for (int r = 0; r < repeats; r++) {
     for (int i = 0; i < numFrames; i++) {
-        uint16_t drawColor = fireColors[0];
-        // Zero-flicker drawing style: fills zeros with background in one pass
-        tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, drawColor, TFT_BLACK);
-        delay(frameDelay);
+      tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight, TFT_BLACK);
+      tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, color);
+      delay(frameDelay);
     }
   }
 }
 
 void displayLogo(uint16_t color, int displayTime) {
-  int16_t bitmapWidth = 140;
-  int16_t bitmapHeight = 210;
+  int16_t bitmapWidth = 150;
+  int16_t bitmapHeight = 150;
   int16_t screenWidth = tft.width();
   int16_t screenHeight = tft.height();
   int16_t logoX = (screenWidth - bitmapWidth) / 2;
-  int16_t logoY = (screenHeight - bitmapHeight) / 2 - 35;
+  int16_t logoY = (screenHeight - bitmapHeight) / 2 - 20;
 
-  tft.fillScreen(TFT_BLACK);
-  
-  tft.drawBitmap(logoX, logoY, bitmap_icon_logo, bitmapWidth, bitmapHeight, ORANGE);
+  tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight, TFT_BLACK);
+  tft.drawBitmap(logoX, logoY, bitmap_icon_r3x_logo, bitmapWidth, bitmapHeight, color);
 
-  tft.setTextColor(ORANGE);
-  tft.setTextFont(2);
+  tft.setTextColor(color);
+  tft.setTextFont(1);
+
+  tft.setTextSize(2);
+  int16_t textX = screenWidth / 3.5;
+  int16_t textY = logoY + bitmapHeight + 10;
+  tft.setCursor(textX, textY);
+  tftPrintObf(OBF_PN, sizeof(OBF_PN));
 
   tft.setTextSize(1);
-  int16_t textX = screenWidth / 2;
-  int16_t textY = logoY + bitmapHeight + 5;
-  tft.setTextDatum(MC_DATUM);
-  
-  char buf[64];
-  decodeObfTo(buf, sizeof(buf), OBF_PN, sizeof(OBF_PN), k0());
-  tft.drawString(buf, textX, textY);
+  textX = screenWidth / 3.5;
+  textY += 20;
+  tft.setCursor(textX, textY);
+  tft.print("by ");
+  tftPrintObf(OBF_DN, sizeof(OBF_DN));
 
-  textY += 18;
-  tft.setTextColor(0x07FF); // Cyan
-  tft.setTextFont(2);
-  char devBuf[64];
-  decodeObfTo(devBuf, sizeof(devBuf), OBF_DN, sizeof(OBF_DN), k0());
-  tft.drawString(String("by ") + devBuf, textX, textY);
-
-  textY += 16;
-  tft.setTextColor(GREEN);
-  tft.drawString("ESP32-S3 ONLY", textX, textY);
-
-  textY += 16;
-  tft.setTextColor(GRAY);
-  tft.drawString(ESP32DIV_VERSION, textX, textY);
-  
-  tft.setTextDatum(TL_DATUM);
+  textX = screenWidth / 2.5;
+  textY += 50;
+  tft.setCursor(textX, textY);
+  // Version is intentionally NOT obfuscated.
+  tft.print(ESP32DIV_VERSION);
 
   Serial.println("==================================");
   serialPrintObf(OBF_PN, sizeof(OBF_PN), true);
-  Serial.print("Created by:   "); serialPrintObf(OBF_DN, sizeof(OBF_DN), true);
-  Serial.print("Target MCU:   ESP32-S3 ONLY (Future MCU ports planned)\n");
+  Serial.print("Developed by: "); serialPrintObf(OBF_DN, sizeof(OBF_DN), true);
+  // Version is intentionally NOT obfuscated.
   Serial.print("Version:      "); Serial.println(ESP32DIV_VERSION);
+  Serial.print("Contact:      "); serialPrintObf(OBF_EM, sizeof(OBF_EM), true);
   Serial.print("GitHub:       "); serialPrintObf(OBF_GH, sizeof(OBF_GH), true);
-  Serial.print("License:      MIT License\n");
+  Serial.print("Website:      "); serialPrintObf(OBF_WB, sizeof(OBF_WB), true);
   Serial.println("==================================");
 
   delay(displayTime);
@@ -841,6 +1312,71 @@ int blank[19];
 
 long baudRates[] = {9600, 19200, 38400, 57600, 115200};
 byte baudIndex = 0;
+
+static int terminalContentBottom() {
+  return featureHasTouchNavBar() ? (int)touchNavContentBottomY() : DISPLAY_HEIGHT;
+}
+
+static int terminalBotFixedArea() {
+  const int bottom = terminalContentBottom();
+  return (bottom < DISPLAY_HEIGHT) ? (DISPLAY_HEIGHT - bottom) : BOT_FIXED_AREA;
+}
+
+static void terminalUpdateNavLabels() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  setTouchNavLabels("Exit", nullptr, terminalActive ? "Pause" : "Active", nullptr, "Baud");
+  redrawTouchButtonBar();
+}
+
+static void terminalCycleBaud() {
+  if (terminalActive) {
+    terminalActive = false;
+    terminalUpdateNavLabels();
+    return;
+  }
+  baudIndex = (baudIndex + 1) % 5;
+  Serial.end();
+  delay(100);
+  Serial.begin(baudRates[baudIndex]);
+  tft.fillRect(0, 37, DISPLAY_WIDTH, 16, ORANGE);
+  tft.setTextColor(TFT_WHITE, TFT_WHITE);
+  String baudMsg = " Serial Terminal - " + String(baudRates[baudIndex]) + " baud ";
+  tft.drawCentreString(baudMsg, DISPLAY_WIDTH / 2, 37, 2);
+  delay(10);
+}
+
+static void terminalSetActive(bool active) {
+  terminalActive = active;
+  delay(10);
+  tft.fillRect(0, 37, DISPLAY_WIDTH, 16, ORANGE);
+  tft.setTextColor(TFT_WHITE, TFT_WHITE);
+  if (active) {
+    tft.drawCentreString(" Serial Terminal Active ", DISPLAY_WIDTH / 2, 37, 2);
+  } else {
+    String baudMsg = " Serial Terminal - " + String(baudRates[baudIndex]) + " baud ";
+    tft.drawCentreString(baudMsg, DISPLAY_WIDTH / 2, 37, 2);
+  }
+  terminalUpdateNavLabels();
+}
+
+static void terminalHandleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+    feature_exit_requested = true;
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+    terminalCycleBaud();
+    return;
+  }
+  if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+    terminalSetActive(!terminalActive);
+  }
+}
 
 void runUI() {
 
@@ -920,7 +1456,7 @@ void runUI() {
 
     if (millis() - lastTouchCheck >= touchCheckInterval) {
         int x, y;
-        if (feature_active && readTouchXY(x, y)) {
+        if (!featureHasTouchNavBar() && feature_active && readTouchXY(x, y)) {
             if (y > STATUS_BAR_Y_OFFSET && y < STATUS_BAR_Y_OFFSET + STATUS_BAR_HEIGHT) {
                 for (int i = 0; i < ICON_NUM; i++) {
                     if (x > iconX[i] && x < iconX[i] + ICON_SIZE) {
@@ -950,7 +1486,10 @@ int scroll_line() {
   tft.fillRect(0, yStart, blank[(yStart - TOP_FIXED_AREA) / TEXT_HEIGHT], TEXT_HEIGHT, TFT_BLACK);
 
   yStart += TEXT_HEIGHT;
-  if (yStart >= DISPLAY_HEIGHT - BOT_FIXED_AREA) yStart = TOP_FIXED_AREA + (yStart - DISPLAY_HEIGHT + BOT_FIXED_AREA);
+  const int scrollLimit = DISPLAY_HEIGHT - terminalBotFixedArea();
+  if (yStart >= scrollLimit) {
+    yStart = TOP_FIXED_AREA + (yStart - scrollLimit);
+  }
   scrollAddress(yStart);
   delay(1);
   return yTemp;
@@ -984,15 +1523,23 @@ void terminalSetup() {
 
   Serial.begin(baudRates[baudIndex]);
 
-  setupScrollArea(TOP_FIXED_AREA, BOT_FIXED_AREA);
+  const int bfa = terminalBotFixedArea();
+  yArea = DISPLAY_HEIGHT - TOP_FIXED_AREA - bfa;
+  yDraw = DISPLAY_HEIGHT - bfa - TEXT_HEIGHT;
+  setupScrollArea(TOP_FIXED_AREA, bfa);
 
   for (byte i = 0; i < 19; i++) blank[i] = 0;
 
+  terminalUpdateNavLabels();
 }
 
 void terminalLoop() {
 
   updateStatusBar();
+  if (featureHasTouchNavBar()) {
+    maintainTouchNavBar();
+  }
+  terminalHandleNavButtons();
   runUI();
 
   if (terminalActive) {
@@ -1056,11 +1603,12 @@ static int  sel = 0;
 static bool dirtySettings = false;
 static bool uiDirty = false;
 
-static const char* items[] = {"Brightness", "Theme", "NeoPixel", "Auto Scan"};
+static const char* items[] = {"Brightness", "Theme", "Accent", "NeoPixel", "Auto Scan"};
 static const int N = sizeof(items)/sizeof(items[0]);
 
 static uint8_t  last_brightness;
 static Theme    last_theme;
+static uint8_t  last_accent;
 static bool     last_neopixel;
 static bool     last_autoScan;
 static int      last_sel;
@@ -1105,6 +1653,10 @@ static void wipeBrightnessWidgetArea() {
 }
 static void wipeThemeWidgetArea() {
   Rect r = rowRect(1);
+  tft.fillRect(r.x + LABEL_W, r.y + 2, r.w - LABEL_W - 6, r.h - 4, UI_BG);
+}
+static void wipeAccentWidgetArea() {
+  Rect r = rowRect(2);
   tft.fillRect(r.x + LABEL_W, r.y + 2, r.w - LABEL_W - 6, r.h - 4, UI_BG);
 }
 static void wipeSwitchWidgetArea(int row) {
@@ -1159,8 +1711,22 @@ static void drawBrightness(uint8_t v, bool selected) {
   drawBrightnessWidget(v, selected);
 }
 
-static Rect rThemeDark()  { Rect r=rowRect(1); return makeRect(r.x + LABEL_W + 6,   r.y + 8, 50, r.h-16); }
-static Rect rThemeLight() { Rect r=rowRect(1); return makeRect(r.x + LABEL_W + 6+54, r.y + 8, 50, r.h-16); }
+static Rect rThemeDark()  {
+  Rect r = rowRect(1);
+  int right = r.x + r.w - 6;
+  tft.setTextFont(2);
+  int wD = (int)tft.textWidth("[Dark]");
+  int wL = (int)tft.textWidth("Light");
+  int gap = 6;
+  return makeRect(right - wD - gap - wL, r.y + 8, wD, r.h - 16);
+}
+static Rect rThemeLight() {
+  Rect r = rowRect(1);
+  int right = r.x + r.w - 6;
+  tft.setTextFont(2);
+  int wL = (int)tft.textWidth("[Light]");
+  return makeRect(right - wL, r.y + 8, wL, r.h - 16);
+}
 
 static void drawThemeWidget(Theme th, bool ) {
 
@@ -1168,24 +1734,67 @@ static void drawThemeWidget(Theme th, bool ) {
   wipeThemeWidgetArea();
 
   Rect r = rowRect(1);
-  int baseX = r.x + LABEL_W + 6;
-  int ty    = r.y + (r.h/2 - 6);
+  int right = r.x + r.w - 6;
+  int ty    = r.y + (r.h / 2 - 6);
 
   setLabelFont();
-  tft.setTextColor(textStrong, UI_BG);
-  tft.setCursor(baseX, ty);
 
-  if (th == Theme::Dark) {
-    tft.print("[Dark]  Light");
-  } else {
-    tft.print("Dark  [Light]");
-  }
+  const char* darkLabel  = (th == Theme::Dark)  ? "[Dark]"  : "Dark";
+  const char* lightLabel = (th == Theme::Light) ? "[Light]" : "Light";
+
+  int wD = (int)tft.textWidth(darkLabel);
+  int wL = (int)tft.textWidth(lightLabel);
+  int gap = 6;
+
+  int lx = right - wL;
+  int dx = lx - gap - wD;
+
+  tft.setTextColor(textStrong, UI_BG);
+  tft.setCursor(dx, ty);
+  tft.print(darkLabel);
+  tft.setCursor(lx, ty);
+  tft.print(lightLabel);
 
   tft.endWrite();
 }
 static void drawTheme(Theme th, bool selected) {
   drawCardStatic(1, selected);
   drawThemeWidget(th, selected);
+}
+
+static Rect rAccentSwatch() {
+  Rect r = rowRect(2);
+  int sw = 18;
+  int sx = r.x + r.w - sw - 6;
+  int sy = r.y + (r.h - sw) / 2;
+  return makeRect(sx, sy, sw, sw);
+}
+static void drawAccentWidget(uint8_t preset, bool ) {
+  tft.startWrite();
+  wipeAccentWidgetArea();
+
+  Rect r = rowRect(2);
+  int right = r.x + r.w - 6;
+  int ty = r.y + (r.h / 2 - 6);
+
+  setLabelFont();
+  const char* name = accentPresetName(preset);
+  int nameW = (int)tft.textWidth(name);
+  Rect sw = rAccentSwatch();
+  int nameX = sw.x - 8 - nameW;
+
+  tft.setTextColor(textStrong, UI_BG);
+  tft.setCursor(nameX, ty);
+  tft.print(name);
+
+  tft.fillRoundRect(sw.x, sw.y, sw.w, sw.h, 4, accentColor565(preset));
+  tft.drawRoundRect(sw.x, sw.y, sw.w, sw.h, 4, cardEdge);
+
+  tft.endWrite();
+}
+static void drawAccent(uint8_t preset, bool selected) {
+  drawCardStatic(2, selected);
+  drawAccentWidget(preset, selected);
 }
 
 static Rect rSwitchTrack(int row){
@@ -1237,8 +1846,8 @@ static void drawSwitchRow(bool on, bool selected, int row) {
   drawSwitchWidgetRow(on, selected, row);
 }
 
-static void drawNeoPixel(bool on, bool selected) { drawSwitchRow(on, selected, 2); }
-static void drawAutoScan(bool on, bool selected) { drawSwitchRow(on, selected, 3); }
+static void drawNeoPixel(bool on, bool selected) { drawSwitchRow(on, selected, 3); }
+static void drawAutoScan(bool on, bool selected) { drawSwitchRow(on, selected, 4); }
 
 static Rect backRect(){
   int h = tft.height();
@@ -1301,15 +1910,17 @@ static void drawAll() {
   auto& s = settings();
   drawBrightness(s.brightness, sel==0);
   drawTheme(s.theme, sel==1);
-  drawNeoPixel(s.neopixelEnabled, sel==2);
+  drawAccent(s.accentColor, sel==2);
+  drawNeoPixel(s.neopixelEnabled, sel==3);
   bool autoScan = (s.autoWifiScan || s.autoBleScan);
-  drawAutoScan(autoScan, sel==3);
+  drawAutoScan(autoScan, sel==4);
 
   drawFooter(false, false);
 
   last_sel        = sel;
   last_brightness = s.brightness;
   last_theme      = s.theme;
+  last_accent     = s.accentColor;
   last_neopixel   = s.neopixelEnabled;
   last_autoScan     = autoScan;
   uiDirty = false;
@@ -1318,7 +1929,7 @@ static void drawAll() {
 static void redrawIfChanged() {
   auto& s = settings();
 
-  if (s.theme != last_theme) {
+  if (s.theme != last_theme || s.accentColor != last_accent) {
     applyThemeToPalette(s.theme);
     buildPalette();
     drawAll();
@@ -1328,9 +1939,10 @@ static void redrawIfChanged() {
   if (sel != last_sel) {
     drawCardStatic(0, sel==0);  drawBrightnessWidget(s.brightness, sel==0);
     drawCardStatic(1, sel==1);  drawThemeWidget(s.theme, sel==1);
-    drawCardStatic(2, sel==2);  drawSwitchWidgetRow(s.neopixelEnabled, sel==2, 2);
+    drawCardStatic(2, sel==2);  drawAccentWidget(s.accentColor, sel==2);
+    drawCardStatic(3, sel==3);  drawSwitchWidgetRow(s.neopixelEnabled, sel==3, 3);
     bool autoScan = (s.autoWifiScan || s.autoBleScan);
-    drawCardStatic(3, sel==3);  drawSwitchWidgetRow(autoScan, sel==3, 3);
+    drawCardStatic(4, sel==4);  drawSwitchWidgetRow(autoScan, sel==4, 4);
     last_sel = sel;
   } else {
     if (s.brightness != last_brightness) {
@@ -1338,12 +1950,12 @@ static void redrawIfChanged() {
       last_brightness = s.brightness;
     }
     if (s.neopixelEnabled != last_neopixel) {
-      drawSwitchWidgetRow(s.neopixelEnabled, sel==2, 2);
+      drawSwitchWidgetRow(s.neopixelEnabled, sel==3, 3);
       last_neopixel = s.neopixelEnabled;
     }
     bool autoScan = (s.autoWifiScan || s.autoBleScan);
     if (autoScan != last_autoScan) {
-      drawSwitchWidgetRow(autoScan, sel==3, 3);
+      drawSwitchWidgetRow(autoScan, sel==4, 4);
       last_autoScan = autoScan;
     }
     if (s.theme != last_theme) {
@@ -1377,6 +1989,18 @@ static bool applyTheme(Theme t){
   lastChangeMs = millis();
   return true;
 }
+static bool applyAccent(uint8_t preset){
+  auto& s = settings();
+  preset = accentPresetClamp(preset);
+  if (s.accentColor == preset) return false;
+  s.accentColor = preset;
+  applyThemeToPalette(s.theme);
+  buildPalette();
+  dirtySettings = true;
+  uiDirty = true;
+  lastChangeMs = millis();
+  return true;
+}
 static bool applyNeoPixel(bool en){
   auto& s = settings();
   if (s.neopixelEnabled == en) return false;
@@ -1401,7 +2025,12 @@ static bool applyAutoScan(bool en){
 static void handleTouch() {
   int tx, ty;
   static uint32_t lastToggleMs = 0;
-  if (!readTouchXY(tx, ty)) { dragging = false; return; }
+  static bool accentArmed = true;
+  if (!readTouchXY(tx, ty)) {
+    dragging = false;
+    accentArmed = true;
+    return;
+  }
 
   Rect br = backRect();
   Rect sr = saveRect();
@@ -1460,13 +2089,35 @@ static void handleTouch() {
   } else if (sel == 1) {
     Rect d = rThemeDark();
     Rect l = rThemeLight();
+    uint32_t now = millis();
     if (tx >= d.x && tx <= d.x+d.w && ty >= d.y && ty <= d.y+d.h) {
-      applyTheme(Theme::Dark);
+      if (now - lastToggleMs > 200) {
+        applyTheme(Theme::Dark);
+        lastToggleMs = now;
+      }
     } else if (tx >= l.x && tx <= l.x+l.w && ty >= l.y && ty <= l.y+l.h) {
-      applyTheme(Theme::Light);
+      if (now - lastToggleMs > 200) {
+        applyTheme(Theme::Light);
+        lastToggleMs = now;
+      }
     }
   } else if (sel == 2) {
-    Rect tr = rSwitchTrack(2);
+    Rect sw = rAccentSwatch();
+    const bool onSwatch =
+        (tx >= sw.x - 80 && tx <= sw.x + sw.w && ty >= sw.y - 8 && ty <= sw.y + sw.h + 8);
+    if (onSwatch) {
+      uint32_t now = millis();
+      if (accentArmed && (now - lastToggleMs > 250)) {
+        uint8_t next = (s.accentColor + 1) % ACCENT_PRESET_COUNT;
+        applyAccent(next);
+        lastToggleMs = now;
+        accentArmed = false;
+      }
+    } else {
+      accentArmed = true;
+    }
+  } else if (sel == 3) {
+    Rect tr = rSwitchTrack(3);
     if (tx >= tr.x && tx <= tr.x+tr.w && ty >= tr.y-10 && ty <= tr.y+tr.h+10) {
       uint32_t now = millis();
       if (now - lastToggleMs > 120) {
@@ -1474,8 +2125,8 @@ static void handleTouch() {
         lastToggleMs = now;
       }
     }
-  } else if (sel == 3) {
-    Rect tr = rSwitchTrack(3);
+  } else if (sel == 4) {
+    Rect tr = rSwitchTrack(4);
     if (tx >= tr.x && tx <= tr.x+tr.w && ty >= tr.y-10 && ty <= tr.y+tr.h+10) {
       uint32_t now = millis();
       if (now - lastToggleMs > 120) {
@@ -1536,8 +2187,9 @@ void loop(){
     auto& s=settings();
     if (sel==0 && s.brightness>0)      { applyBrightness(s.brightness>8? s.brightness-8:0); }
     else if (sel==1)                   { applyTheme(Theme::Dark); }
-    else if (sel==2)                   { applyNeoPixel(false); }
-    else if (sel==3)                   { applyAutoScan(false); }
+    else if (sel==2)                   { applyAccent((s.accentColor + ACCENT_PRESET_COUNT - 1) % ACCENT_PRESET_COUNT); }
+    else if (sel==3)                   { applyNeoPixel(false); }
+    else if (sel==4)                   { applyAutoScan(false); }
     changedByButtons=true;
     lastActionMs = now;
   }
@@ -1545,8 +2197,9 @@ void loop(){
     auto& s=settings();
     if (sel==0 && s.brightness<255)    { applyBrightness(s.brightness+8); }
     else if (sel==1)                   { applyTheme(Theme::Light); }
-    else if (sel==2)                   { applyNeoPixel(true); }
-    else if (sel==3)                   { applyAutoScan(true); }
+    else if (sel==2)                   { applyAccent((s.accentColor + 1) % ACCENT_PRESET_COUNT); }
+    else if (sel==3)                   { applyNeoPixel(true); }
+    else if (sel==4)                   { applyAutoScan(true); }
     changedByButtons=true;
     lastActionMs = now;
   }
@@ -1565,6 +2218,881 @@ void loop(){
 }
 
 }
+
+namespace SdFileManager {
+
+using FeatureUI::Button;
+using FeatureUI::ButtonStyle;
+
+static constexpr uint16_t COL_BG   = FEATURE_BG;
+static constexpr int STATUS_BAR_H = 20;
+static constexpr int HEADER_H = 54;
+
+static String ellipsize(const String& s, int maxW, uint8_t font) {
+  if (tft.textWidth(s, font) <= maxW) return s;
+  String out = s;
+  while (out.length() > 0 && tft.textWidth(out + "...", font) > maxW) {
+    out.remove(out.length() - 1);
+  }
+  return out + "...";
+}
+
+struct Entry {
+  String name;
+  String path;
+  bool isDir = false;
+  uint32_t size = 0;
+  bool isUp = false; // synthetic ".."
+};
+
+enum class Page : uint8_t { Browser, Info, ConfirmDelete };
+
+static Page page = Page::Browser;
+static std::vector<Entry> entries;
+static String cwd = "/";
+static int sel = 0;
+static int listStart = 0;
+static bool uiDirty = true;
+static bool touchActive = false;
+static bool touchDragging = false;
+static int touchStartX = 0;
+static int touchStartY = 0;
+static int touchLastY = 0;
+static int scrollAccumY = 0;
+
+static Button browserBtns[4];
+static Button infoBtns[2];
+static Button confirmBtns[2];
+
+static String lastErr;
+
+static int sdFmContentBottom() {
+  return featureHasTouchNavBar() ? (int)touchNavContentBottomY()
+                                 : (int)(tft.height() - FeatureUI::FOOTER_H - 2);
+}
+
+static void sdFmRestoreNavChrome() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  invalidateTouchButtonCue();
+  maintainTouchNavBar();
+}
+
+static char s_sdFmNavCache[5][12] = {{0}};
+
+static void sdFmResetNavLabelCache() {
+  for (int i = 0; i < 5; ++i) {
+    s_sdFmNavCache[i][0] = '\0';
+  }
+}
+
+static void sdFmApplyNavLabels(const char* left, const char* down, const char* center,
+                               const char* up, const char* right) {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  const char* src[5] = {left, down, center, up, right};
+  bool same = true;
+  for (int i = 0; i < 5; ++i) {
+    const char* s = (src[i] && src[i][0]) ? src[i] : "";
+    if (strcmp(s_sdFmNavCache[i], s) != 0) {
+      same = false;
+      break;
+    }
+  }
+  if (same) {
+    return;
+  }
+  for (int i = 0; i < 5; ++i) {
+    const char* s = (src[i] && src[i][0]) ? src[i] : "";
+    strncpy(s_sdFmNavCache[i], s, sizeof(s_sdFmNavCache[i]) - 1);
+    s_sdFmNavCache[i][sizeof(s_sdFmNavCache[i]) - 1] = '\0';
+  }
+  setTouchNavLabels(left, down, center, up, right);
+  redrawTouchButtonBar();
+}
+
+static void sdFmUpdateBrowserNavLabels() {
+  sdFmApplyNavLabels("Exit", "Next", "Refresh", "Prev", "Open");
+}
+
+static void sdFmUpdateInfoNavLabels() {
+  sdFmApplyNavLabels("Back", nullptr, "Delete", nullptr, nullptr);
+}
+
+static void sdFmUpdateConfirmNavLabels() {
+  sdFmApplyNavLabels("Cancel", nullptr, "Delete", nullptr, nullptr);
+}
+
+static void clampSel();
+static bool reloadDir(const String& path, String* errOut);
+static void resetListDrawCache();
+static void drawBrowserPage(bool full = true);
+static void drawConfirmDeletePage();
+static void openSelected();
+static bool deleteSelected(String* errOut);
+
+static void sdFmHandleNavButtons() {
+  if (!featureHasTouchNavBar()) {
+    return;
+  }
+  if (page == Page::Browser) {
+    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+      feature_exit_requested = true;
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_UP) && !entries.empty()) {
+      sel--;
+      clampSel();
+      drawBrowserPage(false);
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_DOWN) && !entries.empty()) {
+      sel++;
+      clampSel();
+      drawBrowserPage(false);
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_RIGHT)) {
+      openSelected();
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+      reloadDir(cwd, nullptr);
+      drawBrowserPage(true);
+    }
+  } else if (page == Page::Info) {
+    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+      drawBrowserPage();
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+      drawConfirmDeletePage();
+    }
+  } else if (page == Page::ConfirmDelete) {
+    if (isTouchNavButtonPressedEdge(BTN_LEFT)) {
+      drawBrowserPage();
+      return;
+    }
+    if (isTouchNavButtonPressedEdge(BTN_SELECT)) {
+      String err;
+      const bool ok = deleteSelected(&err);
+      if (!ok) {
+        showNotification("Delete", err.c_str());
+        delay(500);
+      }
+      reloadDir(cwd, nullptr);
+      drawBrowserPage();
+    }
+  }
+}
+
+static File sdOpenCompat(const String& path) {
+  File f = SD.open(path.c_str());
+  if (f) return f;
+  if (path.length() > 1 && path[0] == '/') {
+    f = SD.open(path.substring(1).c_str());
+  }
+  return f;
+}
+
+static bool sdRemoveCompat(const String& path) {
+  if (SD.remove(path.c_str())) return true;
+  if (path.length() > 1 && path[0] == '/') return SD.remove(path.substring(1).c_str());
+  return false;
+}
+
+static bool sdRmdirCompat(const String& path) {
+  if (SD.rmdir(path.c_str())) return true;
+  if (path.length() > 1 && path[0] == '/') return SD.rmdir(path.substring(1).c_str());
+  return false;
+}
+
+static String normalizePath(const String& path) {
+  if (path.length() == 0) return "/";
+  String p = path;
+  if (p[0] != '/') p = "/" + p;
+
+  String out;
+  out.reserve(p.length());
+  bool lastSlash = false;
+  for (size_t i = 0; i < p.length(); ++i) {
+    char c = p[i];
+    if (c == '/') {
+      if (!lastSlash) out += c;
+      lastSlash = true;
+    } else {
+      out += c;
+      lastSlash = false;
+    }
+  }
+
+  while (out.length() > 1 && out.endsWith("/")) {
+    out.remove(out.length() - 1);
+  }
+  return out;
+}
+
+static void clampSel() {
+  if (entries.empty()) { sel = 0; return; }
+  if (sel < 0) sel = 0;
+  if (sel >= (int)entries.size()) sel = (int)entries.size() - 1;
+}
+
+static void listLayout(int& top, int& bottom, int& rowH, int& maxVisible) {
+  top = STATUS_BAR_H + HEADER_H + 6;
+  bottom = sdFmContentBottom();
+  rowH = 22;
+  maxVisible = max(1, (bottom - top) / rowH);
+}
+
+static void clampListStart(int maxVisible) {
+  int maxStart = max(0, (int)entries.size() - maxVisible);
+  if (listStart < 0) listStart = 0;
+  if (listStart > maxStart) listStart = maxStart;
+}
+
+static void ensureSelectionVisible(int maxVisible) {
+  if (entries.empty()) { listStart = 0; return; }
+  if (sel < listStart) listStart = sel;
+  if (sel >= listStart + maxVisible) listStart = sel - maxVisible + 1;
+  clampListStart(maxVisible);
+}
+
+static String parentPath(const String& p) {
+  String np = normalizePath(p);
+  if (np == "/") return "/";
+  int slash = np.lastIndexOf('/');
+  if (slash <= 0) return "/";
+  return np.substring(0, slash);
+}
+
+static bool reloadDir(const String& path, String* errOut = nullptr) {
+  entries.clear();
+  lastErr = "";
+
+  if (!isSDCardAvailable()) {
+    if (errOut) *errOut = "SD not mounted";
+    lastErr = "SD not mounted";
+    return false;
+  }
+
+  String openPath = normalizePath(path);
+
+  File dir = sdOpenCompat(openPath);
+  if (!dir) {
+    if (errOut) *errOut = "Open dir failed";
+    lastErr = "Open dir failed";
+    return false;
+  }
+  if (!dir.isDirectory()) {
+    dir.close();
+    if (errOut) *errOut = "Not a directory";
+    lastErr = "Not a directory";
+    return false;
+  }
+
+  cwd = openPath;
+
+  if (cwd != "/") {
+    Entry up;
+    up.name = "..";
+    up.path = parentPath(cwd);
+    up.isDir = true;
+    up.isUp = true;
+    entries.push_back(up);
+  }
+
+  for (;;) {
+    File f = dir.openNextFile();
+    if (!f) break;
+
+    Entry e;
+    {
+      String raw = String(f.name());
+      while (raw.endsWith("/")) raw.remove(raw.length() - 1);
+      int slash = raw.lastIndexOf('/');
+      String base = (slash >= 0) ? raw.substring(slash + 1) : raw;
+      while (base.startsWith("/")) base.remove(0, 1);
+      while (base.endsWith("/")) base.remove(base.length() - 1);
+      e.name = base.length() ? base : raw;
+      while (e.name.startsWith("/")) e.name.remove(0, 1);
+      while (e.name.endsWith("/")) e.name.remove(e.name.length() - 1);
+      if (e.name.length() == 0) { f.close(); continue; }
+    }
+    e.isDir = f.isDirectory();
+    e.size = e.isDir ? 0 : (uint32_t)f.size();
+    if (cwd == "/") e.path = "/" + e.name;
+    else e.path = cwd + "/" + e.name;
+    e.path = normalizePath(e.path);
+
+    entries.push_back(e);
+    f.close();
+    yield();
+  }
+  dir.close();
+
+  // Sort, keeping ".." first when present.
+  int start = (entries.size() && entries[0].isUp) ? 1 : 0;
+  std::sort(entries.begin() + start, entries.end(), [](const Entry& a, const Entry& b) {
+    if (a.isDir != b.isDir) return a.isDir > b.isDir;
+    return a.name < b.name;
+  });
+
+  sel = 0;
+  listStart = 0;
+  uiDirty = true;
+  resetListDrawCache();
+  return true;
+}
+
+static void drawHeader(const char* title) {
+  const int w = tft.width();
+  const int y0 = STATUS_BAR_H;
+  tft.fillRect(0, y0, w, HEADER_H, FEATURE_BG);
+
+  tft.setTextFont(2);
+  tft.setTextSize(1);
+  tft.setTextColor(UI_ICON, FEATURE_BG);
+  tft.setCursor(8, y0 + 4);
+  tft.print(title);
+
+  tft.setTextFont(1);
+  tft.setTextColor(UI_TEXT, FEATURE_BG);
+  String pathLine = ellipsize(cwd, w - 16, 1);
+  tft.setCursor(8, y0 + 24);
+  tft.print(pathLine);
+
+  String right = entries.empty()
+    ? String("0/0")
+    : String(sel + 1) + "/" + String((int)entries.size());
+  String left = String("Items: ") + String((int)entries.size());
+  int rightW = tft.textWidth(right, 1);
+  tft.setCursor(8, y0 + 40);
+  tft.print(left);
+  tft.setCursor(w - 8 - rightW, y0 + 40);
+  tft.print(right);
+
+  tft.drawLine(0, y0 + HEADER_H, w, y0 + HEADER_H, UI_LINE);
+}
+
+static void drawHeaderSelCounter() {
+  const int w = tft.width();
+  const int y0 = STATUS_BAR_H;
+  String right = entries.empty()
+    ? String("0/0")
+    : String(sel + 1) + "/" + String((int)entries.size());
+  int rightW = tft.textWidth(right, 1);
+  tft.fillRect(w - 8 - max(rightW, 40), y0 + 38, max(rightW, 40) + 4, 14, FEATURE_BG);
+  tft.setTextFont(1);
+  tft.setTextColor(UI_TEXT, FEATURE_BG);
+  tft.setCursor(w - 8 - rightW, y0 + 40);
+  tft.print(right);
+}
+
+static void drawListRow(int idx, int y, int rowH, bool selected) {
+  const int x = 8;
+  const int w = tft.width() - 16;
+  uint16_t bg = selected ? UI_FG : FEATURE_BG;
+  uint16_t fg = selected ? UI_ICON : UI_TEXT;
+
+  tft.fillRect(x, y, w, rowH - 1, bg);
+  tft.drawLine(x, y + rowH - 1, x + w, y + rowH - 1, UI_LINE);
+
+  tft.setTextFont(1);
+  tft.setTextColor(fg, bg);
+  String label = entries[idx].name;
+  if (entries[idx].isDir && !entries[idx].isUp) label = label + "/";
+  label = ellipsize(label, w - 80, 1);
+  tft.setCursor(x + 4, y + 6);
+  tft.print(label);
+
+  String right = entries[idx].isDir ? "DIR" : "";
+  if (!entries[idx].isDir && !entries[idx].isUp) {
+    char sbuf[16];
+    uint32_t kb = (entries[idx].size + 1023) / 1024;
+    snprintf(sbuf, sizeof(sbuf), "%lukB", (unsigned long)kb);
+    right = sbuf;
+  }
+  if (right.length()) {
+    int tw = tft.textWidth(right, 1);
+    tft.setCursor(x + w - tw - 6, y + 6);
+    tft.print(right);
+  }
+}
+
+static void drawListScrollbar(int top, int bottom, int start, int maxVisible) {
+  if ((int)entries.size() <= maxVisible) {
+    return;
+  }
+  int scrollBarX = tft.width() - 6;
+  int scrollBarHeight = bottom - top - 6;
+  int scrollBarY = top + 3;
+  int indicatorHeight = (maxVisible * scrollBarHeight) / (int)entries.size();
+  if (indicatorHeight < 6) indicatorHeight = 6;
+  int indicatorY = scrollBarY;
+  indicatorY = scrollBarY + (start * (scrollBarHeight - indicatorHeight)) /
+                            max(1, (int)entries.size() - maxVisible);
+  tft.fillRect(scrollBarX, scrollBarY, 3, scrollBarHeight, UI_LINE);
+  tft.fillRect(scrollBarX, indicatorY, 3, indicatorHeight, UI_ACCENT);
+}
+
+static int s_lastListSel = -1;
+static int s_lastListStart = -1;
+
+static void resetListDrawCache() {
+  s_lastListSel = -1;
+  s_lastListStart = -1;
+}
+
+static void drawList(bool full = true) {
+  int top, bottom, rowH, maxVisible;
+  listLayout(top, bottom, rowH, maxVisible);
+
+  if (!isSDCardAvailable()) {
+    tft.fillRect(0, top, tft.width(), bottom - top, COL_BG);
+    tft.setTextFont(2);
+    tft.setTextColor(UI_WARN, COL_BG);
+    tft.drawCentreString("SD not mounted", tft.width() / 2, top + 30, 2);
+    resetListDrawCache();
+    return;
+  }
+
+  if (entries.empty()) {
+    tft.fillRect(0, top, tft.width(), bottom - top, COL_BG);
+    tft.setTextFont(2);
+    tft.setTextColor(UI_TEXT, COL_BG);
+    tft.drawCentreString("Empty folder", tft.width() / 2, top + 30, 2);
+    resetListDrawCache();
+    return;
+  }
+
+  clampSel();
+  ensureSelectionVisible(maxVisible);
+
+  int start = listStart;
+  int end = min((int)entries.size(), start + maxVisible);
+
+  const bool windowChanged = full || s_lastListSel < 0 || s_lastListStart != start;
+  if (windowChanged) {
+    tft.fillRect(0, top, tft.width(), bottom - top, COL_BG);
+    for (int i = start; i < end; ++i) {
+      int y = top + (i - start) * rowH;
+      drawListRow(i, y, rowH, i == sel);
+    }
+    drawListScrollbar(top, bottom, start, maxVisible);
+    drawHeaderSelCounter();
+    s_lastListSel = sel;
+    s_lastListStart = start;
+    return;
+  }
+
+  if (s_lastListSel != sel) {
+    drawHeaderSelCounter();
+    const int oldSel = s_lastListSel;
+    const int newSel = sel;
+    if (oldSel >= start && oldSel < end) {
+      drawListRow(oldSel, top + (oldSel - start) * rowH, rowH, false);
+    }
+    if (newSel >= start && newSel < end) {
+      drawListRow(newSel, top + (newSel - start) * rowH, rowH, true);
+    }
+    s_lastListSel = sel;
+  }
+}
+
+static void drawBrowserFooter() {
+  if (featureHasTouchNavBar()) {
+    sdFmUpdateBrowserNavLabels();
+    return;
+  }
+  bool sdOk = isSDCardAvailable();
+  bool hasSel = !entries.empty();
+  bool selIsUp = false;
+  if (hasSel) {
+    clampSel();
+    selIsUp = entries[sel].isUp;
+  }
+
+  FeatureUI::drawFooterBg();
+  FeatureUI::layoutFooter4(
+    browserBtns,
+    "Exit",    ButtonStyle::Secondary,
+    "Open",    ButtonStyle::Primary,
+    "Delete",  ButtonStyle::Danger,
+    "Refresh", ButtonStyle::Secondary,
+    false,
+    (!sdOk || !hasSel),
+    (!sdOk || !hasSel || selIsUp),
+    false
+  );
+  for (auto& b : browserBtns) FeatureUI::drawButton(b);
+}
+
+static void drawBrowserPage(bool full) {
+  page = Page::Browser;
+  if (full) {
+    featureClearContent(COL_BG);
+    currentBatteryVoltage = readBatteryVoltage();
+    drawStatusBar(currentBatteryVoltage, true);
+    drawHeader("SD File Manager");
+    drawBrowserFooter();
+    drawList(true);
+    sdFmRestoreNavChrome();
+    uiDirty = false;
+    return;
+  }
+
+  drawList(false);
+  uiDirty = false;
+}
+
+static void drawInfoPage() {
+  page = Page::Info;
+  featureClearContent(COL_BG);
+  currentBatteryVoltage = readBatteryVoltage();
+  drawStatusBar(currentBatteryVoltage, true);
+  drawHeader("File info");
+
+  if (featureHasTouchNavBar()) {
+    sdFmUpdateInfoNavLabels();
+  } else {
+    FeatureUI::drawFooterBg();
+    FeatureUI::layoutFooter2(
+      infoBtns,
+      "Back",   ButtonStyle::Secondary,
+      "Delete", ButtonStyle::Danger,
+      false, (entries.empty() || !isSDCardAvailable())
+    );
+    for (auto& b : infoBtns) FeatureUI::drawButton(b);
+  }
+
+  const int top = STATUS_BAR_H + HEADER_H + 6;
+  const int bottom = sdFmContentBottom();
+  tft.fillRect(0, top, tft.width(), bottom - top, COL_BG);
+
+  if (entries.empty()) {
+    tft.setTextFont(2);
+    tft.setTextColor(UI_TEXT, COL_BG);
+    tft.drawCentreString("No selection", tft.width()/2, top + 24, 2);
+    uiDirty = false;
+    return;
+  }
+
+  clampSel();
+  const Entry& e = entries[sel];
+
+  tft.setTextFont(2);
+  tft.setTextColor(UI_TEXT, COL_BG);
+  tft.setCursor(8, top + 10);
+  tft.print("Name:");
+  tft.setCursor(70, top + 10);
+  tft.print(e.name);
+
+  tft.setCursor(8, top + 34);
+  tft.print("Type:");
+  tft.setCursor(70, top + 34);
+  tft.print(e.isDir ? "Folder" : "File");
+
+  if (!e.isDir) {
+    tft.setCursor(8, top + 58);
+    tft.print("Size:");
+    tft.setCursor(70, top + 58);
+    tft.print(String(e.size) + " B");
+  }
+
+  tft.setTextFont(1);
+  tft.setCursor(8, top + 88);
+  tft.print("Path:");
+  tft.setCursor(8, top + 102);
+  tft.print(e.path);
+
+  sdFmRestoreNavChrome();
+  uiDirty = false;
+}
+
+static void drawConfirmDeletePage() {
+  page = Page::ConfirmDelete;
+  featureClearContent(COL_BG);
+  currentBatteryVoltage = readBatteryVoltage();
+  drawStatusBar(currentBatteryVoltage, true);
+  drawHeader("Confirm delete");
+
+  if (featureHasTouchNavBar()) {
+    sdFmUpdateConfirmNavLabels();
+  } else {
+    FeatureUI::drawFooterBg();
+    FeatureUI::layoutFooter2(
+      confirmBtns,
+      "Cancel", ButtonStyle::Secondary,
+      "Delete", ButtonStyle::Danger,
+      false, false
+    );
+    for (auto& b : confirmBtns) FeatureUI::drawButton(b);
+  }
+
+  const int top = STATUS_BAR_H + HEADER_H + 6;
+  const int bottom = sdFmContentBottom();
+  tft.fillRect(0, top, tft.width(), bottom - top, COL_BG);
+
+  tft.setTextFont(2);
+  tft.setTextColor(UI_WARN, COL_BG);
+  tft.drawCentreString("Delete selected item?", tft.width()/2, top + 18, 2);
+
+  if (!entries.empty()) {
+    const Entry& e = entries[sel];
+    tft.setTextFont(1);
+    tft.setTextColor(UI_TEXT, COL_BG);
+    tft.drawCentreString(e.name.c_str(), tft.width()/2, top + 48, 1);
+  }
+
+  sdFmRestoreNavChrome();
+  uiDirty = false;
+}
+
+static bool deleteSelected(String* errOut = nullptr) {
+  if (entries.empty()) { if (errOut) *errOut = "Nothing selected"; return false; }
+  clampSel();
+  const Entry e = entries[sel];
+  if (e.isUp) { if (errOut) *errOut = "Cannot delete .."; return false; }
+
+  if (!isSDCardAvailable()) { if (errOut) *errOut = "SD not mounted"; return false; }
+
+  bool ok = false;
+  if (e.isDir) {
+    // ESP32 FS supports rmdir. If directory is not empty it will fail.
+    ok = sdRmdirCompat(e.path);
+  } else {
+    ok = sdRemoveCompat(e.path);
+  }
+  if (!ok) {
+    if (errOut) *errOut = "Delete failed";
+    return false;
+  }
+  return true;
+}
+
+static void openSelected() {
+  if (entries.empty()) return;
+  clampSel();
+  const Entry& e = entries[sel];
+
+  if (e.isDir) {
+    String err;
+    if (!reloadDir(normalizePath(e.path), &err)) {
+      drawBrowserPage();
+      String msg = err.length() ? err : "Failed";
+      msg += "\n";
+      msg += e.path;
+      showNotification("Open", msg.c_str());
+      delay(600);
+      return;
+    }
+    drawBrowserPage();
+    return;
+  }
+  drawInfoPage();
+}
+
+static bool hitListRow(int x, int y, int& outIdx) {
+  int top, bottom, rowH, maxVisible;
+  listLayout(top, bottom, rowH, maxVisible);
+  if (y < top || y >= bottom) return false;
+
+  ensureSelectionVisible(maxVisible);
+  int start = listStart;
+  int end = min((int)entries.size(), start + maxVisible);
+
+  int row = (y - top) / rowH;
+  int idx = start + row;
+  if (idx < start || idx >= end) return false;
+  outIdx = idx;
+  return true;
+}
+
+static void handleTap(int x, int y) {
+  if (page == Page::Browser) {
+    int idx = -1;
+    if (hitListRow(x, y, idx)) {
+      if (idx != sel) {
+        sel = idx;
+        clampSel();
+        drawBrowserPage(false);
+      } else {
+        openSelected();
+      }
+      delay(140);
+      return;
+    }
+
+    int f = -1;
+    if (!featureHasTouchNavBar()) {
+      f = FeatureUI::hit(browserBtns, 4, x, y);
+    }
+    if (f >= 0) {
+      FeatureUI::drawButton(browserBtns[f], true);
+      delay(90);
+      FeatureUI::drawButton(browserBtns[f], false);
+      delay(90);
+
+      if (f == 0) { feature_exit_requested = true; return; }          // Exit
+      if (f == 1) { openSelected(); delay(120); return; }             // Open
+      if (f == 2) {                                                   // Delete
+        if (!entries.empty() && isSDCardAvailable() && !entries[sel].isUp) {
+          drawConfirmDeletePage();
+        }
+        delay(120);
+        return;
+      }
+      if (f == 3) { reloadDir(cwd, nullptr); drawBrowserPage(true); delay(120); return; } // Refresh
+    }
+  }
+  else if (page == Page::Info) {
+    int f = -1;
+    if (!featureHasTouchNavBar()) {
+      f = FeatureUI::hit(infoBtns, 2, x, y);
+    }
+    if (f >= 0) {
+      FeatureUI::drawButton(infoBtns[f], true);
+      delay(90);
+      FeatureUI::drawButton(infoBtns[f], false);
+      delay(90);
+
+      if (f == 0) { drawBrowserPage(); delay(120); return; }         // Back
+      if (f == 1) { drawConfirmDeletePage(); delay(120); return; }   // Delete
+    }
+  }
+  else if (page == Page::ConfirmDelete) {
+    int f = -1;
+    if (!featureHasTouchNavBar()) {
+      f = FeatureUI::hit(confirmBtns, 2, x, y);
+    }
+    if (f >= 0) {
+      FeatureUI::drawButton(confirmBtns[f], true);
+      delay(90);
+      FeatureUI::drawButton(confirmBtns[f], false);
+      delay(90);
+
+      if (f == 0) {                                                  // Cancel
+        drawBrowserPage();
+        delay(120);
+        return;
+      }
+      if (f == 1) {                                                  // Delete
+        String err;
+        bool ok = deleteSelected(&err);
+        if (!ok) {
+          showNotification("Delete", err.c_str());
+          delay(500);
+        }
+        reloadDir(cwd, nullptr);
+        drawBrowserPage();
+        delay(120);
+        return;
+      }
+    }
+  }
+}
+
+void setup() {
+  sdRetryMount();
+  sdFmResetNavLabelCache();
+  page = Page::Browser;
+  cwd = "/";
+  sel = 0;
+  uiDirty = true;
+  reloadDir("/", nullptr);
+  currentBatteryVoltage = readBatteryVoltage();
+  drawStatusBar(currentBatteryVoltage, true);
+  drawBrowserPage();
+}
+
+void loop() {
+  updateStatusBar();
+  if (featureHasTouchNavBar()) {
+    maintainTouchNavBar();
+  }
+  sdFmHandleNavButtons();
+  if (feature_exit_requested) {
+    return;
+  }
+  if (uiDirty) {
+    switch (page) {
+      case Page::Browser:        drawBrowserPage(true); break;
+      case Page::Info:           drawInfoPage(); break;
+      case Page::ConfirmDelete:  drawConfirmDeletePage(); break;
+    }
+  }
+
+  // Physical navigation (kept for devices without touch nav bar).
+  if (!featureHasTouchNavBar() && isButtonPressed(BTN_UP)) {
+    if (page == Page::Browser && !entries.empty()) { sel--; clampSel(); drawBrowserPage(false); }
+    delay(160);
+    return;
+  }
+  if (!featureHasTouchNavBar() && isButtonPressed(BTN_DOWN)) {
+    if (page == Page::Browser && !entries.empty()) { sel++; clampSel(); drawBrowserPage(false); }
+    delay(160);
+    return;
+  }
+
+  int x, y;
+  bool touched = readTouchXY(x, y);
+  if (!touched) {
+    if (touchActive && !touchDragging) {
+      handleTap(touchStartX, touchStartY);
+    }
+    touchActive = false;
+    touchDragging = false;
+    scrollAccumY = 0;
+    return;
+  }
+
+  if (!touchActive) {
+    touchActive = true;
+    touchDragging = false;
+    touchStartX = x;
+    touchStartY = y;
+    touchLastY = y;
+    scrollAccumY = 0;
+    return;
+  }
+
+  if (page == Page::Browser) {
+    int top, bottom, rowH, maxVisible;
+    listLayout(top, bottom, rowH, maxVisible);
+    bool canScroll = (touchStartY >= top && touchStartY < bottom);
+
+    int dy = y - touchLastY;
+    touchLastY = y;
+
+    if (!touchDragging && canScroll) {
+      if (abs(y - touchStartY) > 8) {
+        touchDragging = true;
+      }
+    }
+
+    if (touchDragging && canScroll) {
+      scrollAccumY += dy;
+      int steps = scrollAccumY / rowH;
+      if (steps != 0) {
+        listStart -= steps;
+        clampListStart(maxVisible);
+        if (!entries.empty()) {
+          if (sel < listStart) sel = listStart;
+          if (sel >= listStart + maxVisible) sel = min((int)entries.size() - 1, listStart + maxVisible - 1);
+        }
+        drawBrowserPage(false);
+        scrollAccumY -= steps * rowH;
+      }
+    }
+  }
+
+  return;
+}
+
+} // namespace SdFileManager
 
 namespace TouchCalib {
 static int stepIdx = 0;
@@ -1594,7 +3122,11 @@ void loop(){
     uint16_t yMax = max(ys[2], ys[3]);
     auto& s = settings();
     s.touchXMin = xMin; s.touchXMax = xMax;
+#if defined(BOARD_CYD)
+    s.touchYMin = yMin; s.touchYMax = yMax;
+#else
     s.touchYMin = yMax; s.touchYMax = yMin;
+#endif
 
     bool ok = settingsSave();
 
@@ -1612,194 +3144,13 @@ void loop(){
     return;
   }
 
-  if (ts.touched()){
-    TS_Point p = ts.getPoint();
-    xs[stepIdx]=p.x; ys[stepIdx]=p.y;
+  int16_t rx = 0, ry = 0;
+  if (readTouchRawXY(rx, ry)) {
+    xs[stepIdx] = (uint16_t)rx;
+    ys[stepIdx] = (uint16_t)ry;
     stepIdx++;
     if (stepIdx<4) drawTarget(pts[stepIdx][0], pts[stepIdx][1]);
   }
   delay(100);
 }
-}
-
-// --- Bit-Bang SPI Logic for Deep Verification ---
-static uint8_t bitBangTransfer(uint8_t data) {
-    uint8_t ret = 0;
-    // PULLUP helps identify if MISO is completely disconnected (stays HIGH)
-    pinMode(SD_MISO, INPUT_PULLUP);
-    for (int i = 7; i >= 0; i--) {
-        digitalWrite(SD_MOSI, (data >> i) & 1);
-        delayMicroseconds(10);
-        digitalWrite(SD_SCLK, HIGH);
-        delayMicroseconds(10);
-        if (digitalRead(SD_MISO)) ret |= (1 << i);
-        digitalWrite(SD_SCLK, LOW);
-        delayMicroseconds(10);
-    }
-    return ret;
-}
-
-// --- Hardware Status Probing ---
-
-bool checkCC1101() {
-    // Isolated CS handling: Pull ALL shared CS pins HIGH
-    pinMode(SD_CS, OUTPUT); digitalWrite(SD_CS, HIGH);
-    pinMode(CC1101_CS, OUTPUT); digitalWrite(CC1101_CS, HIGH);
-    pinMode(CSN_PIN_1, OUTPUT); digitalWrite(CSN_PIN_1, HIGH);
-    pinMode(CSN_PIN_2, OUTPUT); digitalWrite(CSN_PIN_2, HIGH);
-    pinMode(CSN_PIN_3, OUTPUT); digitalWrite(CSN_PIN_3, HIGH);
-
-    delay(10); // Settling delay
-
-    // Reconfigure SPI for CC1101 pins
-    SPI.end();
-    SPI.begin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, -1);
-    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-
-    // Command: Read STATUS register VERSION (0x31). 
-    // CC1101 Read bit: 0x80 | Status bit: 0x40 -> 0xC0
-    digitalWrite(CC1101_CS, LOW);
-    delayMicroseconds(10);
-    SPI.transfer(0x31 | 0xC0); 
-    uint8_t version = SPI.transfer(0x00);
-    digitalWrite(CC1101_CS, HIGH);
-    
-    SPI.endTransaction();
-    
-    Serial.printf("[DEBUG] CC1101 Probe: 0x%02X\n", version);
-
-    // Restore SPI for SD card safely
-    SPI.end();
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
-
-    // Valid CC1101 VERSION results are 0x04, 0x14, or 0x24. 
-    return (version != 0x00 && version != 0xFF);
-}
-
-bool checkNRF24(int slot) {
-    int ce  = (slot == 1) ? CE_PIN_1  : (slot == 2) ? CE_PIN_2  : CE_PIN_3;
-    int csn = (slot == 1) ? CSN_PIN_1 : (slot == 2) ? CSN_PIN_2 : CSN_PIN_3; // Corrected: use slot-specific CSN pin
-
-    // Phase 1: Isolated CS handling (Pull ALL HIGH)
-    pinMode(SD_CS, OUTPUT); digitalWrite(SD_CS, HIGH);
-    pinMode(CC1101_CS, OUTPUT); digitalWrite(CC1101_CS, HIGH);
-    pinMode(CSN_PIN_1, OUTPUT); digitalWrite(CSN_PIN_1, HIGH);
-    pinMode(CSN_PIN_2, OUTPUT); digitalWrite(CSN_PIN_2, HIGH);
-    pinMode(CSN_PIN_3, OUTPUT); digitalWrite(CSN_PIN_3, HIGH);
-    pinMode(ce,   OUTPUT); digitalWrite(ce, LOW);
-
-    // Phase 2: Setup Bit-Bang Pins
-    pinMode(SD_SCLK, OUTPUT); digitalWrite(SD_SCLK, LOW);
-    pinMode(SD_MOSI, OUTPUT); digitalWrite(SD_MOSI, LOW);
-    pinMode(SD_MISO, INPUT_PULLUP);
-    delay(50);
-
-    Serial.println("\n[DEEP_SCAN] --- NRF24 PHYSICAL LAYER DIAGNOSTIC ---");
-    
-    // Test: MISO Pin Idle State (with Pullup)
-    Serial.printf("[DEEP_SCAN] MISO Idle (Expect HIGH): %s\n", digitalRead(SD_MISO) ? "HIGH" : "LOW");
-
-    // Test: MOSI/MISO Crosstalk
-    digitalWrite(SD_MOSI, LOW); delay(1);
-    bool lowTest = digitalRead(SD_MISO);
-    digitalWrite(SD_MOSI, HIGH); delay(1);
-    bool highTest = digitalRead(SD_MISO);
-    Serial.printf("[DEEP_SCAN] Crosstalk Test: MOSI-LOW reads %s, MOSI-HIGH reads %s\n", 
-                  lowTest ? "HIGH" : "LOW", highTest ? "HIGH" : "LOW");
-
-    // Phase 3: Register Sweep (Registers 0x00 to 0x09)
-    uint8_t regs[10];
-    for (uint8_t i = 0; i < 10; i++) {
-        digitalWrite(csn, LOW);
-        delayMicroseconds(20);
-        uint8_t status = bitBangTransfer(0x00 | i); // Read Command
-        regs[i] = bitBangTransfer(0x00);            // Get Data
-        digitalWrite(csn, HIGH);
-        delayMicroseconds(20);
-        Serial.printf("[DEEP_SCAN] Register 0x%02X: Value=0x%02X, Status=0x%02X\n", i, regs[i], status);
-    }
-
-    // Phase 4: Re-initialize Hardware SPI for the rest of the OS
-    SPI.end();
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
-
-    // Final result logic:
-    // CONFIG (0x00) reset value is 0x08.
-    // SETUP_AW (0x03) reset value is 0x03.
-    // If we see 0xFF and PULLUP is on, it's disconnected.
-    // If we see 0x00, it's shorted to ground.
-    bool detected = (regs[0] != 0xFF && regs[0] != 0x00) || (regs[3] == 0x03);
-    
-    if (detected) Serial.println("[DEEP_SCAN] RESULT: NRF24 responding!");
-    else Serial.println("[DEEP_SCAN] RESULT: NRF24 not responding. Hardware Fault.");
-
-    return detected;
-}
-
-void drawEmergencyExit() {
-    // Disabled per user request
-}
-
-bool checkSD() {
-    // Fast path: already mounted and accessible
-    if (SD.cardType() != CARD_NONE && SD.exists("/")) return true;
-    // Attempt a fresh mount on the hardware module SPI bus
-    SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
-    if (SD.begin(SD_CS)) return true;
-    return false;
-}
-
-bool checkGlobalBackTouch() {
-    return false;
-}
-
-void initSharedSPI() {
-    // Before starting SPI, pull all CS pins HIGH to prevent modules from locking the bus
-    pinMode(SD_CS, OUTPUT); digitalWrite(SD_CS, HIGH);
-    pinMode(CC1101_CS, OUTPUT); digitalWrite(CC1101_CS, HIGH);
-    pinMode(CSN_PIN_1, OUTPUT); digitalWrite(CSN_PIN_1, HIGH);
-    pinMode(CSN_PIN_2, OUTPUT); digitalWrite(CSN_PIN_2, HIGH);
-    pinMode(CSN_PIN_3, OUTPUT); digitalWrite(CSN_PIN_3, HIGH);
-    
-    // Explicitly power down NRF CE pins to ensure they don't lock the bus
-    pinMode(CE_PIN_1, OUTPUT); digitalWrite(CE_PIN_1, LOW);
-    pinMode(CE_PIN_2, OUTPUT); digitalWrite(CE_PIN_2, LOW);
-    pinMode(CE_PIN_3, OUTPUT); digitalWrite(CE_PIN_3, LOW);
-
-    #ifdef SD_CS_PIN
-    if (SD_CS_PIN != SD_CS && SD_CS_PIN != CC1101_CS) {
-        pinMode(SD_CS_PIN, OUTPUT);
-        digitalWrite(SD_CS_PIN, HIGH);
-    }
-    #endif
-
-    // Brief stabilization delay for DIY wiring
-    delay(50);
-}
-
-bool showModuleError(const char* moduleName) {
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(RED, TFT_BLACK);
-    tft.setTextFont(2);
-    tft.setCursor(10, 50);
-    tft.print("[!] Error: Module Missing");
-    
-    tft.setTextColor(WHITE, TFT_BLACK);
-    tft.setCursor(10, 80);
-    tft.print(moduleName);
-    tft.print(" is not detected.");
-    
-    tft.setCursor(10, 110);
-    tft.setTextColor(GRAY, TFT_BLACK);
-    tft.print("Please check wiring or exit.");
-    
-    while (!feature_exit_requested) {
-        drawEmergencyExit();
-        if (checkGlobalBackTouch() || isButtonPressed(BTN_SELECT)) {
-            feature_exit_requested = true;
-            break;
-        }
-        delay(50);
-    }
-    return false;
 }

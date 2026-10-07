@@ -64,6 +64,30 @@ namespace Deauther {
   void deautherSetup();
   void deautherLoop();
 }
+namespace ProbeRequestFlood {
+  void probeRequestFloodSetup();
+  void probeRequestFloodLoop();
+}
+
+namespace HiddenSsidReveal {
+  void hiddenSsidSetup();
+  void hiddenSsidLoop();
+}
+
+namespace WpsScanner {
+  void wpsScannerSetup();
+  void wpsScannerLoop();
+}
+
+namespace ArpScanner {
+  void arpScannerSetup();
+  void arpScannerLoop();
+}
+
+namespace KarmaAttack {
+  void karmaSetup();
+  void karmaLoop();
+}
 
 namespace FirmwareUpdate {
   void updateSetup();

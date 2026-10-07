@@ -10,13 +10,9 @@
 #include <XPT2046_Touchscreen.h>
 #include <nRF24L01.h>
 #include "BleCompat.h"
-#if __has_include("esp_bt.h")
 #include "esp_bt.h"
-#endif
-#if __has_include("esp_bt_main.h")
 #include "esp_bt_main.h"
-#endif
-#if __has_include("esp_gap_bt_api.h")
+#if defined(SOC_BT_CLASSIC_SUPPORTED) && SOC_BT_CLASSIC_SUPPORTED
 #include "esp_gap_bt_api.h"
 #endif
 #include "esp_wifi.h"
@@ -29,6 +25,7 @@ extern PCF8574 pcf;
 namespace BleJammer {
 void blejamSetup();
 void blejamLoop();
+void exit();
 }
 
 namespace BleSpoofer {
@@ -39,6 +36,24 @@ namespace BleSpoofer {
 namespace SourApple {
   void sourappleSetup();
   void sourappleLoop();
+}
+
+namespace AirTagSpoofer {
+  void airTagSetup();
+  void airTagLoop();
+  void exit();
+}
+
+namespace AirTagSniffer {
+  void airTagSnifferSetup();
+  void airTagSnifferLoop();
+  void exit();
+}
+
+namespace BleSkimmer {
+  void bleSkimmerSetup();
+  void bleSkimmerLoop();
+  void exit();
 }
 
 namespace BleScan {
@@ -52,11 +67,37 @@ namespace BleScan {
 namespace Scanner {
   void scannerSetup();
   void scannerLoop();
+  void exit();
 }
 
 namespace ProtoKill {
   void prokillLoop();
   void prokillSetup();
+  void exit();
+}
+
+namespace EsbSniffer {
+  void esbSnifferSetup();
+  void esbSnifferLoop();
+  void exit();
+}
+
+namespace EsbReplay {
+  void esbReplaySetup();
+  void esbReplayLoop();
+  void exit();
+}
+
+namespace MouseJack {
+  void mouseJackSetup();
+  void mouseJackLoop();
+  void exit();
+}
+
+namespace MouseJackInject {
+  void mouseJackInjectSetup();
+  void mouseJackInjectLoop();
+  void exit();
 }
 
 namespace BleSniffer {

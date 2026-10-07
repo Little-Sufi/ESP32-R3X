@@ -23,24 +23,16 @@
 #include <esp_wifi_types.h>
 #include <esp_system.h>
 #include <esp_event.h>
-#if __has_include(<esp_event_loop.h>)
 #include <esp_event_loop.h>
-#endif
 #include <nvs_flash.h>
 
 // Use NimBLE for all BLE functionality, via the BleCompat shim which
 // exposes BLEDevice/BLEScan/etc as aliases to NimBLE types.
 #include "BleCompat.h"
 
-#if __has_include("esp_bt.h")
 #include "esp_bt.h"
-#endif
-#if __has_include("esp_bt_main.h")
 #include "esp_bt_main.h"
-#endif
-#if __has_include("esp_gap_bt_api.h")
 #include "esp_gap_bt_api.h"
-#endif
 
 #include "arduinoFFT.h"
 #include "ELECHOUSE_CC1101_SRC_DRV.h"
@@ -69,6 +61,24 @@ namespace SourApple {
   void sourappleLoop();
   void exit();
 }
+namespace AirTagSpoofer {
+  void airTagSetup();
+  void airTagLoop();
+  void exit();
+}
+namespace AirTagSniffer {
+  void airTagSnifferSetup();
+  void airTagSnifferLoop();
+  void exit();
+}
+namespace BleSkimmer {
+  void bleSkimmerSetup();
+  void bleSkimmerLoop();
+  void exit();
+}
+/** Init NimBLE once (releases unused Classic BT RAM first). Safe to call repeatedly. */
+bool ensureBleStackReady();
+
 namespace BleScan {
   void bleScanSetup();
   void bleScanLoop();
@@ -78,13 +88,38 @@ namespace BleScan {
   // Last known BLE device count from background/foreground scans.
   int  getLastCount();
 }
+
+/** One-shot NimBLE bring-up (releases Classic BT RAM first). Safe to call repeatedly. */
+bool ensureBleStackReady();
 namespace Scanner {
   void scannerSetup();
   void scannerLoop();
+  void exit();
 }
 namespace ProtoKill {
   void prokillSetup();
   void prokillLoop();
+  void exit();
+}
+namespace EsbSniffer {
+  void esbSnifferSetup();
+  void esbSnifferLoop();
+  void exit();
+}
+namespace EsbReplay {
+  void esbReplaySetup();
+  void esbReplayLoop();
+  void exit();
+}
+namespace MouseJack {
+  void mouseJackSetup();
+  void mouseJackLoop();
+  void exit();
+}
+namespace MouseJackInject {
+  void mouseJackInjectSetup();
+  void mouseJackInjectLoop();
+  void exit();
 }
 namespace BleSniffer {
   void blesnifferSetup();
@@ -104,6 +139,14 @@ namespace SavedProfile {
 namespace subjammer {
   void subjammerSetup();
   void subjammerLoop();
+}
+namespace SubBrute {
+  void subBruteSetup();
+  void subBruteLoop();
+}
+namespace jammingdetector {
+  void Setup();
+  void Loop();
 }
 
 /* ───────────── WiFi namespaces ───────────── */
@@ -126,6 +169,10 @@ namespace WifiScan {
   void startBackgroundScanner();
   // Last known WiFi network count from background/foreground scans.
   int  getLastCount();
+  bool wifiCacheValidForReuse();
+  int  staWifiScanSync();
+  bool loadApListFromWifiCache(wifi_ap_record_t** ap_list, int* network_count,
+                               int (*compare_ap)(const void*, const void*));
 }
 namespace CaptivePortal {
   void cportalSetup();
@@ -134,6 +181,26 @@ namespace CaptivePortal {
 namespace Deauther {
   void deautherSetup();
   void deautherLoop();
+}
+namespace ProbeRequestFlood {
+  void probeRequestFloodSetup();
+  void probeRequestFloodLoop();
+}
+namespace HiddenSsidReveal {
+  void hiddenSsidSetup();
+  void hiddenSsidLoop();
+}
+namespace WpsScanner {
+  void wpsScannerSetup();
+  void wpsScannerLoop();
+}
+namespace ArpScanner {
+  void arpScannerSetup();
+  void arpScannerLoop();
+}
+namespace KarmaAttack {
+  void karmaSetup();
+  void karmaLoop();
 }
 namespace FirmwareUpdate {
   void updateSetup();
