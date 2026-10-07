@@ -1,0 +1,17 @@
+# Build artifacts and temp caches
+build/
+.pio/
+.vscode/
+*.bin
+*.elf
+*.map
+*.hex
+*.tmp
+*.bak
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
