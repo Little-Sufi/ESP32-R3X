@@ -3247,45 +3247,45 @@ void handleHardwareDiagnostics() {
     tft.fillScreen(TFT_BLACK);
     GadgetUI::drawTacticalHeader("HARDWARE INFO & PROBE");
 
-    // Quick-Jump Page & Action Tabs (Y = 32..50)
+    // Quick-Jump Page & Action Tabs (Y = 40..56)
     // Tab 1: [PAGE 1: MOD 1-6]
     bool onPage1 = (scrollOffset == 0);
-    tft.fillRect(6, 32, 72, 18, onPage1 ? CYBER_CYAN : 0x18E3);
-    tft.drawRect(6, 32, 72, 18, onPage1 ? TFT_WHITE : DARK_GRAY);
+    tft.fillRect(6, 40, 72, 16, onPage1 ? CYBER_CYAN : 0x18E3);
+    tft.drawRect(6, 40, 72, 16, onPage1 ? TFT_WHITE : DARK_GRAY);
     tft.setTextFont(1);
     tft.setTextColor(onPage1 ? TFT_BLACK : TFT_WHITE);
     tft.setTextDatum(MC_DATUM);
-    tft.drawString("MOD 1-6", 42, 41);
+    tft.drawString("MOD 1-6", 42, 48);
 
     // Tab 2: [PAGE 2: MOD 7-12]
     bool onPage2 = (scrollOffset > 0);
-    tft.fillRect(82, 32, 72, 18, onPage2 ? CYBER_CYAN : 0x18E3);
-    tft.drawRect(82, 32, 72, 18, onPage2 ? TFT_WHITE : DARK_GRAY);
+    tft.fillRect(82, 40, 72, 16, onPage2 ? CYBER_CYAN : 0x18E3);
+    tft.drawRect(82, 40, 72, 16, onPage2 ? TFT_WHITE : DARK_GRAY);
     tft.setTextColor(onPage2 ? TFT_BLACK : TFT_WHITE);
-    tft.drawString("MOD 7-12", 118, 41);
+    tft.drawString("MOD 7-12", 118, 48);
 
     // Tab 3: [RESCAN ALL]
-    tft.fillRect(158, 32, 76, 18, 0x8200);
-    tft.drawRect(158, 32, 76, 18, CYBER_ORANGE);
+    tft.fillRect(158, 40, 76, 16, 0x8200);
+    tft.drawRect(158, 40, 76, 16, CYBER_ORANGE);
     tft.setTextColor(TFT_WHITE);
-    tft.drawString("RESCAN ALL", 196, 41);
+    tft.drawString("RESCAN ALL", 196, 48);
     tft.setTextDatum(TL_DATUM);
 
-    // Main Terminal Box for module list (Y = 53..265)
-    GadgetUI::drawTerminalBox(6, 53, 228, 215);
+    // Main Terminal Box for module list (Y = 58..270)
+    GadgetUI::drawTerminalBox(6, 58, 228, 212);
 
-    // Vertical Scrollbar track on right (X = 224..228, Y = 58..260)
-    tft.fillRect(224, 58, 5, 202, 0x18C3);
+    // Vertical Scrollbar track on right (X = 224..228, Y = 62..266)
+    tft.fillRect(224, 62, 5, 204, 0x18C3);
     int thumbHeight = 90;
-    int maxThumbTravel = 202 - thumbHeight;
-    int thumbY = 58 + (scrollOffset * maxThumbTravel) / (kNumDiagModules - kItemsPerPage);
+    int maxThumbTravel = 204 - thumbHeight;
+    int thumbY = 62 + (scrollOffset * maxThumbTravel) / (kNumDiagModules - kItemsPerPage);
     tft.fillRect(224, thumbY, 5, thumbHeight, CYBER_CYAN);
 
     // Render 6 rows
     for (int r = 0; r < kItemsPerPage; r++) {
       int idx = scrollOffset + r;
       if (idx >= kNumDiagModules) break;
-      int y = 57 + r * kRowHeight;
+      int y = 62 + r * kRowHeight;
       bool isSel = (idx == selIdx);
 
       if (isSel) {
@@ -3360,8 +3360,8 @@ void handleHardwareDiagnostics() {
   while (!feature_exit_requested) {
     int tx, ty;
     if (readTouchXY(tx, ty)) {
-      // 1. Top Quick-Jump Page Tabs (Y = 28..52)
-      if (ty >= 28 && ty <= 52) {
+      // 1. Top Quick-Jump Page Tabs (Y = 36..57)
+      if (ty >= 36 && ty <= 57) {
         if (tx >= 6 && tx <= 78) {
           // MOD 1-6 (Page 1)
           scrollOffset = 0;
@@ -3378,8 +3378,8 @@ void handleHardwareDiagnostics() {
           continue;
         } else if (tx >= 156 && tx <= 236) {
           // RESCAN ALL
-          tft.fillRect(6, 53, 228, 215, TFT_BLACK);
-          GadgetUI::drawTerminalBox(6, 53, 228, 215);
+          tft.fillRect(6, 58, 228, 212, TFT_BLACK);
+          GadgetUI::drawTerminalBox(6, 58, 228, 212);
           tft.setTextColor(CYBER_CYAN, TFT_BLACK);
           tft.setTextFont(1);
           tft.setCursor(20, 140);
@@ -3393,8 +3393,8 @@ void handleHardwareDiagnostics() {
         }
       }
 
-      // 2. Bottom Footer Touch Bar (Y >= 275)
-      else if (ty >= 275) {
+      // 2. Bottom Footer Touch Bar (Y >= 272)
+      else if (ty >= 272) {
         if (tx <= 58) {
           // EXIT
           feature_exit_requested = true;
@@ -3435,9 +3435,9 @@ void handleHardwareDiagnostics() {
         }
       }
 
-      // 3. Module List Rows (Y = 54..270)
-      else if (ty >= 54 && ty <= 270) {
-        int tappedRow = (ty - 54) / kRowHeight;
+      // 3. Module List Rows (Y = 58..270)
+      else if (ty >= 58 && ty <= 270) {
+        int tappedRow = (ty - 60) / kRowHeight;
         int tappedIdx = scrollOffset + tappedRow;
         if (tappedIdx >= 0 && tappedIdx < kNumDiagModules) {
           if (selIdx == tappedIdx || tx >= 165) {

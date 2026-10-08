@@ -1326,8 +1326,8 @@ namespace GadgetUI {
     tft.setTextFont(1);
     tft.setTextSize(1);
     tft.setTextColor(CYBER_CYAN, CYBER_NAVY);
-    tft.setCursor(10, 25);
-    tft.print("[ SYSTEM_ONLINE ] ");
+    tft.setCursor(6, 25);
+    tft.print("[R3X] ");
     tft.setTextColor(TFTWHITE, CYBER_NAVY);
     tft.print(title);
 
