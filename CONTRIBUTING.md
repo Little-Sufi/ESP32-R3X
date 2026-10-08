@@ -57,10 +57,10 @@ When creating a bug report, include:
 
 | Field | Details |
 |---|---|
-| **Firmware version** | e.g. v1.7.2 |
-| **Hardware revision** | v1 / v2 / CYD / with Shield |
+| **Firmware version** | e.g. v2.0.0 |
+| **Hardware revision** | ESP32-R3X V2 (ESP32-S3) / v1 / CYD |
 | **Arduino IDE version** | e.g. 2.3.2 |
-| **ESP32 board package version** | 2.0.10 (Espressif) |
+| **ESP32 board package version** | 3.0.x or 2.0.x (Espressif) |
 | **Steps to reproduce** | Numbered, minimal steps |
 | **Expected behaviour** | What should happen |
 | **Actual behaviour** | What actually happens |
@@ -135,10 +135,11 @@ Key libraries included:
 
 | Setting | Value |
 |---|---|
-| Board | ESP32S3 Dev Module (v2) / ESP32 Dev Module (v1, CYD) |
-| Flash Size | 16MB |
-| Partition Scheme | Minimal SPIFFS |
-| PSRAM | OPI PSRAM |
+| Board | ESP32S3 Dev Module (ESP32-S3) / ESP32 Dev Module (v1, CYD) |
+| USB CDC On Boot | Enabled |
+| Flash Size | 4MB (or 16MB) |
+| Partition Scheme | Huge APP (3MB No OTA/1MB SPIFFS) or 16MB Flash |
+| PSRAM | Disabled (or OPI PSRAM if hardware supports) |
 | Upload Speed | 921600 |
 
 ### Entering Download Mode

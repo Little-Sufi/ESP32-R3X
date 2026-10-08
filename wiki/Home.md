@@ -9,6 +9,7 @@ Welcome to the official documentation for **ESP32-R3X** — an advanced multi-ba
 | Section | Description |
 | :--- | :--- |
 | **[Hardware & Schematics](Hardware-and-Schematics.md)** | Full pin mapping for ILI9341 display, XPT2046 touch, CC1101, NRF24L01+, PN532, NEO-6M GPS, IR, PCF8574, and MicroSD. |
+| **[Wiring & Schematics Manual](Wiring-and-Schematics.md)** | Complete visual ASCII schematic diagrams, passive component values, BOM, and RF decoupling guidelines. |
 | **[Installation & Configuration](Installation-and-Configuration.md)** | Step-by-step flashing guide for Arduino IDE 2.x, board configuration parameters, and binary flashing. |
 | **[Sub-GHz RF Exploration Guide](SubGHz-RF-Guide.md)** | Detailed operating manual for CC1101 Signal Analyzer, Replay Attack, Sub-GHz Jammer, De Bruijn Brute-force, and Jamming Detector. |
 | **[Wi-Fi & Bluetooth Security Tools](WiFi-and-BLE-Tools.md)** | Documentation on Beacon Spammer, Deauthenticator, Evil Portal, PMKID sniffer, Sour Apple, and AirTag tracking. |

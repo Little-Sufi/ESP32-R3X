@@ -1276,7 +1276,7 @@ void displayLogo(uint16_t color, int displayTime) {
   int16_t logoY = (screenHeight - bitmapHeight) / 2 - 25;
 
   tft.fillScreen(TFT_BLACK);
-  drawFast1bppBitmap(logoX, logoY, bitmap_icon_cifer, bitmapWidth, bitmapHeight, TFT_WHITE, TFT_BLACK);
+  drawFast1bppBitmap(logoX, logoY, bitmap_icon_r3x_logo, bitmapWidth, bitmapHeight, TFT_WHITE, TFT_BLACK);
 
   tft.setTextColor(TFT_WHITE);
   tft.setTextFont(1);

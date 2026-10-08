@@ -68,8 +68,8 @@ Shares the SPI data lines with the display and uses a dedicated chip select:
 ### 6. NEO-6M GPS Module
 | Signal | ESP32-S3 GPIO | Description / Notes |
 | :--- | :--- | :--- |
-| **GPS RX** | **GPIO 5** | ESP32 TX -> GPS RX (Hardware UART2 @ 9600 baud) |
-| **GPS TX** | **GPIO 6** | GPS TX -> ESP32 RX (Hardware UART2 @ 9600 baud) |
+| **GPS RX** | **GPIO 5** | ESP32 RX <- GPS TX (Hardware UART2 @ 9600 baud) |
+| **GPS TX** | **GPIO 6** | ESP32 TX -> GPS RX (Hardware UART2 @ 9600 baud) |
 
 ---
 

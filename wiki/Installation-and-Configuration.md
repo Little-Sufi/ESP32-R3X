@@ -15,13 +15,17 @@ The easiest way to install ESP32-R3X is using precompiled binaries located in th
    cd tools/esp32-r3x-flasher
    python flash_r3x.py
    ```
-4. Or flash directly with `esptool.py`:
+4. Or flash the all-in-one merged binary directly with `esptool.py` (single offset `0x0`):
+   ```bash
+   esptool.py -p COM9 -b 921600 --chip esp32s3 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3-merged.bin"
+   ```
+   Or flash split components:
    ```bash
    esptool.py -p COM9 -b 921600 --before default_reset --after hard_reset --chip esp32s3 write_flash \
      0x0000 "Pre-compiled Bin/bootloader.bin" \
      0x8000 "Pre-compiled Bin/partitions.bin" \
      0xe000 "Pre-compiled Bin/boot_app0.bin" \
-     0x10000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.2.bin"
+     0x10000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3.bin"
    ```
 
 ---
@@ -61,8 +65,8 @@ Under the **Tools** menu, select the following:
 * **USB DFU On Boot**: `Disabled`
 * **Flash Frequency**: `80MHz`
 * **Flash Mode**: `QIO 80MHz`
-* **Flash Size**: `16MB (128Mb)`
-* **Partition Scheme**: `16M Flash (3MB APP/9.9MB FATFS)`
+* **Flash Size**: `4MB (32Mb)` (or `16MB (128Mb)` if your module is N16R8)
+* **Partition Scheme**: `Huge APP (3MB No OTA/1MB SPIFFS)` (or `16M Flash (3MB APP/9.9MB FATFS)`)
 * **PSRAM**: `Disabled` (or `OPI PSRAM` if your chip has PSRAM)
 * **Upload Speed**: `921600`
 

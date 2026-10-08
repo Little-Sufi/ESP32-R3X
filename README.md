@@ -144,7 +144,7 @@ The table below details the hardware pin configuration for the ESP32-R3X hardwar
 | | T_MOSI | **GPIO 35** | Dedicated Touch MOSI |
 | | T_MISO | **GPIO 37** | Dedicated Touch MISO |
 | | T_CLK | **GPIO 36** | Dedicated Touch Clock |
-| **MicroSD Card** | SD_CS | **GPIO 10** / Bus CS | MicroSD SPI Chip Select |
+| **MicroSD Card** | SD_CS | **GPIO 10** | MicroSD SPI Chip Select |
 | | SD_MOSI | **GPIO 11** | Shared SPI MOSI |
 | | SD_MISO | **GPIO 13** | Shared SPI MISO |
 | | SD_CLK | **GPIO 12** | Shared SPI Clock |
@@ -165,8 +165,8 @@ The table below details the hardware pin configuration for the ESP32-R3X hardwar
 | | PN_MOSI | **GPIO 11** | Shared Secondary SPI MOSI |
 | | PN_MISO | **GPIO 13** | Shared Secondary SPI MISO |
 | | PN_SS | **GPIO 5** | PN532 Slave Select |
-| **GPS (NEO-6M)** | GPS_RX | **GPIO 5** | ESP32 TX -> GPS RX (UART2) |
-| | GPS_TX | **GPIO 6** | GPS TX -> ESP32 RX (UART2) |
+| **GPS (NEO-6M)** | GPS_RX | **GPIO 5** | ESP32 RX <- GPS TX (UART2) |
+| | GPS_TX | **GPIO 6** | ESP32 TX -> GPS RX (UART2) |
 | **Infrared (IR)** | IR_TX | **GPIO 14** | 38kHz High-Power IR LED |
 | | IR_RX | **GPIO 21** | 38kHz Demodulating Receiver |
 | **Navigation I2C (PCF8574)** | I2C_SDA | **GPIO 1** | I2C Data (Auto 0x20-0x27) |
