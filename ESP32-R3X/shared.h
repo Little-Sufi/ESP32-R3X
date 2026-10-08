@@ -408,7 +408,11 @@ static const uint8_t OBF_WB[]   = {96, 124, 124, 120, 123, 50, 39, 39, 111, 97, 
 #define SD_CD    38
 #endif
 #ifndef SD_CS_PIN
+#if defined(BOARD_CYD) || defined(BOARD_ESP32_DIV_V1)
 #define SD_CS_PIN 5
+#else
+#define SD_CS_PIN 10
+#endif
 #endif
 
 /* PN532 RFID/NFC (SPI).

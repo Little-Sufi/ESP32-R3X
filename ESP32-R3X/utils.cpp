@@ -3517,7 +3517,7 @@ namespace GpioDashboard {
       "SCK: 12, MISO: 13, MOSI: 11",
       "",
       "=== Modules (CiferTech) ===",
-      "SD Card CS: 10",
+      "SD Card CS: 10, CD: 38",
       "NRF24 #1 CE: 15, CSN: 4",
       "NRF24 #2 CE: 47, CSN: 48",
       "NRF24 #3 CE: 14, CSN: 21",

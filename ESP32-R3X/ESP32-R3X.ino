@@ -3028,6 +3028,7 @@ static const char* const kPinsSD[] = {
   "SCK  : GPIO 12 (SPI Clock)",
   "MOSI : GPIO 11 (SPI Master Out)",
   "MISO : GPIO 13 (SPI Master In)",
+  "CD   : GPIO 38 (Card Detect)",
   "Bus  : Shared SPI2 (VSPI)",
   "VCC  : 3.3V DC Rail",
   "GND  : System Ground"
@@ -3116,7 +3117,7 @@ static DiagModuleItem s_diagModules[] = {
   { "NRF24 HUB (SLOT1)", "SPI2",  "CE:15 CSN:4",       false, kPinsNRF1,    8, probeNRF1 },
   { "NRF24 HUB (SLOT2)", "SPI2",  "CE:47 CSN:48",      false, kPinsNRF2,    8, probeNRF2 },
   { "NRF24 HUB (SLOT3)", "SPI2",  "CE:14 CSN:21",      false, kPinsNRF3,    8, probeNRF3 },
-  { "SD STORAGE BUS",   "SPI2",  "CS:10 SCK:12",      false, kPinsSD,      7, checkSD },
+  { "SD STORAGE BUS",   "SPI2",  "CS:10 CD:38",       false, kPinsSD,      8, checkSD },
   { "PN532 RFID / NFC", "SPI2",  "SS:5 SCK:12",       false, kPinsPN532,   7, checkPN532 },
   { "NEO-6M GPS",       "UART2", "RX:5 TX:6",         false, kPinsGPS,     7, checkGPS },
   { "IR TRANSCEIVER",   "GPIO",  "TX:14 RX:21",       false, kPinsIR,      6, checkIR },
