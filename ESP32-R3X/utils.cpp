@@ -3516,7 +3516,7 @@ namespace GpioDashboard {
       "=== SPI Bus (SPI2) ===",
       "SCK: 12, MISO: 13, MOSI: 11",
       "",
-      "=== Modules (CiferTech) ===",
+      "=== Expansion Modules ===",
       "SD Card CS: 10, CD: 38",
       "NRF24 #1 CE: 15, CSN: 4",
       "NRF24 #2 CE: 47, CSN: 48",

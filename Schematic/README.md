@@ -2,7 +2,7 @@
 
 Official hardware schematic reference for the **ESP32-R3X** multi-band research platform, built on the **Espressif ESP32-S3** microcontroller (dual-core Xtensa LX7 @ 240MHz, native USB-OTG).
 
-Hardware design is 100% pin-compatible with the **[CiferTech ESP32-DIV V2](https://github.com/cifertech/ESP32-DIV/wiki/Schematics)** schematic.
+Complete schematic specification and pin mapping for the **ESP32-R3X V2** hardware platform.
 
 ---
 

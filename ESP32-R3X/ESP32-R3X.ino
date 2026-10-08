@@ -3184,7 +3184,12 @@ static void showModulePinDetail(int modIdx) {
   while (!detailExit && !feature_exit_requested) {
     int tx, ty;
     if (readTouchXY(tx, ty)) {
-      if (ty > 280) {
+      if (ty <= 35) {
+        // Tap header to exit
+        detailExit = true;
+        delay(150);
+        break;
+      } else if (ty > 280) {
         if (tx >= 80 && tx <= 160) {
           // TEST NOW
           tft.fillRect(18, 250, 204, 16, TFT_BLACK);
@@ -3241,26 +3246,61 @@ void handleHardwareDiagnostics() {
   auto drawOverview = [&]() {
     tft.fillScreen(TFT_BLACK);
     GadgetUI::drawTacticalHeader("HARDWARE INFO & PROBE");
-    GadgetUI::drawTerminalBox(6, 42, 228, 238);
 
+    // Quick-Jump Page & Action Tabs (Y = 32..50)
+    // Tab 1: [PAGE 1: MOD 1-6]
+    bool onPage1 = (scrollOffset == 0);
+    tft.fillRect(6, 32, 72, 18, onPage1 ? CYBER_CYAN : 0x18E3);
+    tft.drawRect(6, 32, 72, 18, onPage1 ? TFT_WHITE : DARK_GRAY);
     tft.setTextFont(1);
+    tft.setTextColor(onPage1 ? TFT_BLACK : TFT_WHITE);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("MOD 1-6", 42, 41);
+
+    // Tab 2: [PAGE 2: MOD 7-12]
+    bool onPage2 = (scrollOffset > 0);
+    tft.fillRect(82, 32, 72, 18, onPage2 ? CYBER_CYAN : 0x18E3);
+    tft.drawRect(82, 32, 72, 18, onPage2 ? TFT_WHITE : DARK_GRAY);
+    tft.setTextColor(onPage2 ? TFT_BLACK : TFT_WHITE);
+    tft.drawString("MOD 7-12", 118, 41);
+
+    // Tab 3: [RESCAN ALL]
+    tft.fillRect(158, 32, 76, 18, 0x8200);
+    tft.drawRect(158, 32, 76, 18, CYBER_ORANGE);
+    tft.setTextColor(TFT_WHITE);
+    tft.drawString("RESCAN ALL", 196, 41);
+    tft.setTextDatum(TL_DATUM);
+
+    // Main Terminal Box for module list (Y = 53..265)
+    GadgetUI::drawTerminalBox(6, 53, 228, 215);
+
+    // Vertical Scrollbar track on right (X = 224..228, Y = 58..260)
+    tft.fillRect(224, 58, 5, 202, 0x18C3);
+    int thumbHeight = 90;
+    int maxThumbTravel = 202 - thumbHeight;
+    int thumbY = 58 + (scrollOffset * maxThumbTravel) / (kNumDiagModules - kItemsPerPage);
+    tft.fillRect(224, thumbY, 5, thumbHeight, CYBER_CYAN);
+
+    // Render 6 rows
     for (int r = 0; r < kItemsPerPage; r++) {
       int idx = scrollOffset + r;
       if (idx >= kNumDiagModules) break;
-      int y = 50 + r * kRowHeight;
+      int y = 57 + r * kRowHeight;
       bool isSel = (idx == selIdx);
 
       if (isSel) {
-        tft.fillRect(10, y - 2, 220, kRowHeight - 2, 0x18E3);
+        tft.fillRect(10, y, 211, kRowHeight - 2, 0x18E3);
+        tft.drawRect(10, y, 211, kRowHeight - 2, CYBER_CYAN);
       } else {
-        tft.fillRect(10, y - 2, 220, kRowHeight - 2, TFT_BLACK);
+        tft.fillRect(10, y, 211, kRowHeight - 2, TFT_BLACK);
+        tft.drawRect(10, y, 211, kRowHeight - 2, 0x2104);
       }
 
-      // Status indicator
-      tft.setCursor(12, y + 2);
+      // Status indicator [OK] or [--]
+      tft.setCursor(14, y + 3);
+      tft.setTextFont(1);
       tft.setTextColor(TFT_WHITE, isSel ? 0x18E3 : TFT_BLACK);
-      tft.print(isSel ? ">" : " ");
-      tft.print("[");
+      tft.print(isSel ? ">[" : " [");
       if (s_diagModules[idx].isConnected) {
         tft.setTextColor(CYBER_CYAN, isSel ? 0x18E3 : TFT_BLACK);
         tft.print("OK");
@@ -3274,19 +3314,45 @@ void handleHardwareDiagnostics() {
       // Module Name
       tft.print(s_diagModules[idx].name);
 
-      // Pins on second sub-line
-      tft.setCursor(38, y + 16);
+      // Detail action badge on selected item
+      if (isSel) {
+        tft.fillRect(172, y + 4, 44, 14, CYBER_CYAN);
+        tft.setTextColor(TFT_BLACK, CYBER_CYAN);
+        tft.drawString("PINS>", 176, y + 7);
+      }
+
+      // Pin summary line
+      tft.setCursor(32, y + 18);
       tft.setTextColor(isSel ? TFT_YELLOW : DARK_GRAY, isSel ? 0x18E3 : TFT_BLACK);
       tft.print(s_diagModules[idx].shortPins);
     }
 
-    // Scroll indicator
-    tft.setTextFont(1);
-    tft.setTextColor(CYBER_ORANGE, TFT_BLACK);
-    tft.setCursor(14, 266);
-    tft.printf("MOD %d/%d | UP/DN:NAV SEL:PINS", selIdx + 1, kNumDiagModules);
+    // Interactive 4-Button Touch Footer (Y = 280..316)
+    // 1. EXIT
+    tft.fillRect(6, 280, 52, 34, 0x2104);
+    tft.drawRect(6, 280, 52, 34, CYBER_CYAN);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TFT_WHITE);
+    tft.drawString("EXIT", 32, 297);
 
-    GadgetUI::drawTacticalFooter("EXIT", "RESCAN", "DETAIL");
+    // 2. UP
+    tft.fillRect(62, 280, 54, 34, 0x18E3);
+    tft.drawRect(62, 280, 54, 34, CYBER_CYAN);
+    tft.setTextColor(CYBER_CYAN);
+    tft.drawString("< UP", 89, 297);
+
+    // 3. DOWN
+    tft.fillRect(120, 280, 54, 34, 0x18E3);
+    tft.drawRect(120, 280, 54, 34, CYBER_CYAN);
+    tft.setTextColor(CYBER_CYAN);
+    tft.drawString("DOWN >", 147, 297);
+
+    // 4. DETAIL
+    tft.fillRect(178, 280, 56, 34, 0x03E0);
+    tft.drawRect(178, 280, 56, 34, TFT_GREEN);
+    tft.setTextColor(TFT_WHITE);
+    tft.drawString("DETAIL", 206, 297);
+    tft.setTextDatum(TL_DATUM);
   };
 
   drawOverview();
@@ -3294,49 +3360,111 @@ void handleHardwareDiagnostics() {
   while (!feature_exit_requested) {
     int tx, ty;
     if (readTouchXY(tx, ty)) {
-      if (ty > 280) {
-        if (tx < 80) {
+      // 1. Top Quick-Jump Page Tabs (Y = 28..52)
+      if (ty >= 28 && ty <= 52) {
+        if (tx >= 6 && tx <= 78) {
+          // MOD 1-6 (Page 1)
+          scrollOffset = 0;
+          selIdx = 0;
+          drawOverview();
+          delay(150);
+          continue;
+        } else if (tx >= 80 && tx <= 154) {
+          // MOD 7-12 (Page 2)
+          scrollOffset = 6;
+          selIdx = 6;
+          drawOverview();
+          delay(150);
+          continue;
+        } else if (tx >= 156 && tx <= 236) {
+          // RESCAN ALL
+          tft.fillRect(6, 53, 228, 215, TFT_BLACK);
+          GadgetUI::drawTerminalBox(6, 53, 228, 215);
+          tft.setTextColor(CYBER_CYAN, TFT_BLACK);
+          tft.setTextFont(1);
+          tft.setCursor(20, 140);
+          tft.print("Probing all 12 modules...");
+          for (int i = 0; i < kNumDiagModules; i++) {
+            s_diagModules[i].isConnected = s_diagModules[i].probeFn();
+          }
+          delay(150);
+          drawOverview();
+          continue;
+        }
+      }
+
+      // 2. Bottom Footer Touch Bar (Y >= 275)
+      else if (ty >= 275) {
+        if (tx <= 58) {
           // EXIT
           feature_exit_requested = true;
           delay(150);
           break;
-        } else if (tx >= 80 && tx <= 160) {
-          // RESCAN ALL
-          tft.fillRect(14, 264, 210, 14, TFT_BLACK);
-          tft.setTextColor(CYBER_CYAN, TFT_BLACK);
-          tft.setCursor(14, 266);
-          tft.print("Scanning all hardware buses...");
-          for (int i = 0; i < kNumDiagModules; i++) {
-            s_diagModules[i].isConnected = s_diagModules[i].probeFn();
+        } else if (tx >= 60 && tx <= 116) {
+          // UP / PREV
+          if (selIdx > 0) {
+            selIdx--;
+            if (selIdx < scrollOffset) scrollOffset = selIdx;
+          } else {
+            selIdx = kNumDiagModules - 1;
+            scrollOffset = kNumDiagModules - kItemsPerPage;
           }
-          delay(100);
           drawOverview();
+          delay(150);
           continue;
-        } else {
+        } else if (tx >= 118 && tx <= 174) {
+          // DOWN / NEXT
+          if (selIdx < kNumDiagModules - 1) {
+            selIdx++;
+            if (selIdx >= scrollOffset + kItemsPerPage) {
+              scrollOffset = selIdx - kItemsPerPage + 1;
+            }
+          } else {
+            selIdx = 0;
+            scrollOffset = 0;
+          }
+          drawOverview();
+          delay(150);
+          continue;
+        } else if (tx >= 176) {
           // DETAIL
           showModulePinDetail(selIdx);
           drawOverview();
+          delay(150);
           continue;
         }
-      } else if (ty >= 46 && ty <= 260) {
-        // Tapped a row directly
-        int tappedRow = (ty - 46) / kRowHeight;
+      }
+
+      // 3. Module List Rows (Y = 54..270)
+      else if (ty >= 54 && ty <= 270) {
+        int tappedRow = (ty - 54) / kRowHeight;
         int tappedIdx = scrollOffset + tappedRow;
         if (tappedIdx >= 0 && tappedIdx < kNumDiagModules) {
-          selIdx = tappedIdx;
-          showModulePinDetail(selIdx);
-          drawOverview();
+          if (selIdx == tappedIdx || tx >= 165) {
+            // Tapped already-selected row OR tapped PINS> button on the right
+            showModulePinDetail(tappedIdx);
+            drawOverview();
+          } else {
+            // Select row
+            selIdx = tappedIdx;
+            drawOverview();
+          }
+          delay(150);
           continue;
         }
       }
     }
 
+    // Physical button controls (if present)
     if (isButtonPressed(BTN_UP)) {
       if (selIdx > 0) {
         selIdx--;
         if (selIdx < scrollOffset) scrollOffset = selIdx;
-        drawOverview();
+      } else {
+        selIdx = kNumDiagModules - 1;
+        scrollOffset = kNumDiagModules - kItemsPerPage;
       }
+      drawOverview();
       delay(120);
     } else if (isButtonPressed(BTN_DOWN)) {
       if (selIdx < kNumDiagModules - 1) {
@@ -3344,8 +3472,11 @@ void handleHardwareDiagnostics() {
         if (selIdx >= scrollOffset + kItemsPerPage) {
           scrollOffset = selIdx - kItemsPerPage + 1;
         }
-        drawOverview();
+      } else {
+        selIdx = 0;
+        scrollOffset = 0;
       }
+      drawOverview();
       delay(120);
     } else if (isButtonPressed(BTN_SELECT)) {
       showModulePinDetail(selIdx);

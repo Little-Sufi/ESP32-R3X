@@ -1,6 +1,6 @@
 # 🔌 Hardware & Schematics Guide
 
-ESP32-R3X is fully hardware-compatible with the official **[CiferTech ESP32-DIV](https://github.com/cifertech/ESP32-DIV/wiki/Schematics)** schematic layout on the ESP32-S3 microcontroller platform.
+ESP32-R3X is fully engineered for the **ESP32-R3X S3 Hardware Platform** on the high-performance ESP32-S3 microcontroller.
 
 ---
 
@@ -138,5 +138,5 @@ ESP32-R3X provides two complementary on-device pinout and diagnostic utilities i
 - Interactive **`[TEST NOW]`** button enables real-time re-probing of that individual module for breadboard continuity and harness testing without rebooting.
 
 ### 2. Live GPIO Pinout Dashboard (`Tools` -> `GPIO Dashboard`)
-Quick, scrollable on-screen cheat sheet listing every active SPI, I2C, UART, Display, and Module pin on the CiferTech ESP32-DIV hardware layout.
+Quick, scrollable on-screen cheat sheet listing every active SPI, I2C, UART, Display, and Module pin on the ESP32-R3X hardware platform.
 
