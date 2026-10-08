@@ -4483,8 +4483,10 @@ void handleButtons() {
 
 void setup() {
   Serial.begin(115200);
+  Serial0.begin(115200);
   delay(50);
-  Serial.println("[boot] 1. start");
+  serialAutomationInit();
+  cliPrintln("[boot] 1. start - ESP32-R3X V2.0");
 
 #if !BOARD_HAS_ESP32S3
   // Weak USB / backlight load can brownout classic ESP32 during intro.
@@ -4499,12 +4501,12 @@ void setup() {
   tft.init();
   tft.setRotation(TFT_ROTATION);
   tft.fillScreen(TFT_BLACK);
-  Serial.println("[boot] 2. tft initialized & screen cleared");
+  cliPrintln("[boot] 2. tft initialized & screen cleared");
 
   setupTouchscreen();
-  Serial.println("[boot] 2a. touch initialized");
+  cliPrintln("[boot] 2a. touch initialized");
 
-  Serial.println("[boot] 2b. attaching backlight");
+  cliPrintln("[boot] 2b. attaching backlight");
 #if ESP_ARDUINO_VERSION >= ESP_ARDUINO_VERSION_VAL(3, 0, 0)
   ledcAttachChannel(BACKLIGHT_PIN, PWM_FREQ, PWM_RESOLUTION, PWM_CHANNEL);
 #else
@@ -4515,56 +4517,56 @@ void setup() {
 
   applyThemeToPalette(settings().theme);
 
-  Serial.println("[boot] 2c. calling loading anim");
+  cliPrintln("[boot] 2c. calling loading anim");
   loading(40, CYBER_CYAN, 0, 0, 1, true);
-  Serial.println("[boot] 3. loading anim done");
+  cliPrintln("[boot] 3. loading anim done");
 
   // 2. Full R3X Boot Logo (133x200 with Little-Sufi creator credits)
   displayLogo(CYBER_ORANGE, 1000);
   delay(200);
-  Serial.println("[boot] 4. displayLogo done");
+  cliPrintln("[boot] 4. displayLogo done");
 
   initSDCard();
-  Serial.println("[boot] 5. initSDCard done");
+  cliPrintln("[boot] 5. initSDCard done");
 
 #if BOARD_HAS_ESP32S3
   settingsLoad();
 #else
   // Avoid SD mount via settingsLoad on v1 (same crash as step 3).
   settingsApplyBoardTouchDefaults();
-  Serial.println("[boot] settings defaults (v1, SD deferred)");
+  cliPrintln("[boot] settings defaults (v1, SD deferred)");
 #endif
   applyThemeToPalette(settings().theme);
   setBrightness(settings().brightness);
-  Serial.println("[boot] 6. settings loaded");
+  cliPrintln("[boot] 6. settings loaded");
 
   // 3. Tactical Health Check Diagnostic Screen
   System::showDiagnosticScreen(System::performHealthCheck());
-  Serial.println("[boot] 7. diagnostic screen done");
+  cliPrintln("[boot] 7. diagnostic screen done");
 
 #if HAS_PCF8574_BUTTONS
   if (!initPcf8574Buttons()) {
-    Serial.println("[boot] 8. PCF8574 unavailable");
+    cliPrintln("[boot] 8. PCF8574 unavailable");
   } else {
-    Serial.println("[boot] 8. PCF8574 initialized");
+    cliPrintln("[boot] 8. PCF8574 initialized");
   }
 #else
-  Serial.println("PCF8574 buttons disabled for this board");
+  cliPrintln("PCF8574 buttons disabled for this board");
 #endif
 
   // Initialize BLE stack at boot to prevent memory fragmentation panics
-  Serial.println("[boot] 9. BLE init begin");
+  cliPrintln("[boot] 9. BLE init begin");
   bleGlobalInit();
-  Serial.println("[boot] 9. BLE init done");
+  cliPrintln("[boot] 9. BLE init done");
 
 #if FEATURE_BLE_DUCKY
   Ducky::setup();
-  Serial.println("[boot] 10. Ducky setup done");
+  cliPrintln("[boot] 10. Ducky setup done");
 #endif
 
 #if BOARD_HAS_ESP32S3
   startStatusBarTask();
-  Serial.println("[boot] 11. status bar task started");
+  cliPrintln("[boot] 11. status bar task started");
 #else
   // Keep boot lightweight on ESP32 — status bar updates from loop() instead.
 #endif
@@ -4575,7 +4577,6 @@ void setup() {
   drawStatusBar(currentBatteryVoltage, false);
 
   last_interaction_time = millis();
-  serialAutomationInit();
   serialAutomationSetLaunchCallback([](int mIdx, int sIdx, int layer) {
     if (feature_active) {
       feature_exit_requested = true;
@@ -4595,7 +4596,7 @@ void setup() {
     displaySubmenu();
     serialAutomationSimulateKey(BTN_SELECT, 250);
   });
-  Serial.println("[boot] 12. READY!");
+  cliPrintln("[boot] 12. READY!");
 }
 
 void loop() {

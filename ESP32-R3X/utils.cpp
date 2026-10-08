@@ -1056,8 +1056,10 @@ static bool sdRemountSoft() {
 #endif
 #endif
 
-  SD.end();
-  s_sdFsMounted = false;
+  if (s_sdFsMounted) {
+    SD.end();
+    s_sdFsMounted = false;
+  }
   delay(2);
   if (sdTryBeginOrder()) {
     s_sdFsMounted = true;
@@ -1144,8 +1146,10 @@ void reclaimSharedSpiBus() {
   digitalWrite(PN532_SS, HIGH);
 #endif
 
-  SD.end();
-  s_sdFsMounted = false;
+  if (s_sdFsMounted) {
+    SD.end();
+    s_sdFsMounted = false;
+  }
 
 #if !TOUCH_SHARES_TFT_SPI
   SPI.end();

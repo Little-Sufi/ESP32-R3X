@@ -30,6 +30,27 @@ static volatile bool s_serialExit = false;
 static String s_rxLine = "";
 static portMUX_TYPE s_cliMux = portMUX_INITIALIZER_UNLOCKED;
 
+void cliPrint(const String& s) {
+  Serial.print(s);
+  Serial0.print(s);
+}
+
+void cliPrintln(const String& s) {
+  Serial.println(s);
+  Serial0.println(s);
+}
+
+void cliPrintf(const char* format, ...) {
+  char buf[256];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(buf, sizeof(buf), format, args);
+  va_end(args);
+  Serial.print(buf);
+  Serial0.print(buf);
+}
+
+
 void serialAutomationSetLaunchCallback(SerialLaunchCallback cb) {
   s_launchCallback = cb;
 }
@@ -80,7 +101,7 @@ bool isSerialExitRequested() {
 }
 
 void serialAutomationDumpHeap() {
-  Serial.printf("[HEAP] Free: %u B, Min Free: %u B, Max Alloc: %u B, PSRAM Free: %u B\n",
+  cliPrintf("[HEAP] Free: %u B, Min Free: %u B, Max Alloc: %u B, PSRAM Free: %u B\n",
                 ESP.getFreeHeap(),
                 ESP.getMinFreeHeap(),
                 ESP.getMaxAllocHeap(),
@@ -90,7 +111,7 @@ void serialAutomationDumpHeap() {
 void serialAutomationDumpStatus() {
   float vBat = readBatteryVoltage();
   const char* mName = (current_menu_index >= 0 && current_menu_index < 8) ? s_menuNames[current_menu_index] : "Unknown";
-  Serial.printf("[STATUS] menu_idx=%d (%s), in_sub_menu=%d, sub_idx=%d, feature_active=%d, exit_req=%d, vBat=%.2fV\n",
+  cliPrintf("[STATUS] menu_idx=%d (%s), in_sub_menu=%d, sub_idx=%d, feature_active=%d, exit_req=%d, vBat=%.2fV\n",
                 current_menu_index, mName, (int)in_sub_menu, current_submenu_index, (int)feature_active, (int)feature_exit_requested, vBat);
 }
 
@@ -99,89 +120,40 @@ void serialAutomationDumpStatus() {
 // -------------------------------------------------------------
 
 static bool testProbeSd() {
-  restoreSdAfterSharedSpi();
   bool ok = checkSD();
   if (ok) {
     uint64_t totalBytes = SD.totalBytes();
     uint64_t usedBytes = SD.usedBytes();
-    Serial.printf("[TEST] SD: PASS (Total: %llu MB, Used: %llu MB)\n",
+    cliPrintf("[TEST] SD: PASS (Total: %llu MB, Used: %llu MB)\n",
                   totalBytes / (1024 * 1024), usedBytes / (1024 * 1024));
   } else {
-    Serial.println("[TEST] SD: FAIL (not mounted)");
+    cliPrintln("[TEST] SD: FAIL (not mounted)");
   }
   return ok;
 }
 
 static bool testProbeNrf() {
-  reclaimSharedSpiBus();
-  bool okSlot1 = false;
-  bool okSlot2 = false;
-
-#if defined(CE_PIN_1) && defined(CSN_PIN_1)
-  {
-    RF24 r1(CE_PIN_1, CSN_PIN_1, 16000000);
-    if (r1.begin()) {
-      okSlot1 = r1.isChipConnected();
-      r1.powerDown();
-    }
+  bool ok = checkNRF24(1) || checkNRF24(2);
+  if (ok) {
+    cliPrintln("[TEST] NRF24: PASS (Radio connected)");
+  } else {
+    cliPrintln("[TEST] NRF24: FAIL (Not detected)");
   }
-#endif
-
-#if defined(CE_PIN_2) && defined(CSN_PIN_2)
-  {
-    RF24 r2(CE_PIN_2, CSN_PIN_2, 16000000);
-    if (r2.begin()) {
-      okSlot2 = r2.isChipConnected();
-      r2.powerDown();
-    }
-  }
-#endif
-
-  restoreSdAfterSharedSpi();
-
-  Serial.printf("[TEST] NRF24: Slot1(CE%d,CSN%d)=%s, Slot2(CE%d,CSN%d)=%s\n",
-                CE_PIN_1, CSN_PIN_1, okSlot1 ? "CONNECTED" : "NOT_FOUND",
-                CE_PIN_2, CSN_PIN_2, okSlot2 ? "CONNECTED" : "NOT_FOUND");
-  return (okSlot1 || okSlot2);
+  return ok;
 }
 
 static bool testProbeCC1101() {
-  reclaimSharedSpiBus();
-  bool ok = false;
-#if defined(CC1101_CS) && defined(CC1101_MISO)
-  pinMode(CC1101_CS, OUTPUT);
-  digitalWrite(CC1101_CS, LOW);
-  delayMicroseconds(100);
-  uint32_t startUs = micros();
-  bool misoReady = false;
-  while (micros() - startUs < 1000) {
-    if (digitalRead(CC1101_MISO) == LOW) {
-      misoReady = true;
-      break;
-    }
-  }
-  digitalWrite(CC1101_CS, HIGH);
-
-  if (misoReady) {
-#if defined(CC1101_SCK) && defined(CC1101_MOSI)
-    ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
-    ELECHOUSE_cc1101.Init();
-    ok = ELECHOUSE_cc1101.getCC1101();
-#endif
-  }
-#endif
-  restoreSdAfterSharedSpi();
-
+  bool ok = checkCC1101();
   if (ok) {
-    Serial.println("[TEST] CC1101: PASS (Sub-GHz radio responding)");
+    cliPrintln("[TEST] CC1101: PASS (Sub-GHz radio responding)");
   } else {
-    Serial.println("[TEST] CC1101: FAIL (no response on SPI)");
+    cliPrintln("[TEST] CC1101: FAIL (No response on SPI)");
   }
   return ok;
 }
 
 static bool testProbeWiFi() {
-  Serial.println("[TEST] WiFi: Starting scan...");
+  cliPrintln("[TEST] WiFi: Starting scan...");
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
   delay(100);
@@ -189,13 +161,13 @@ static bool testProbeWiFi() {
   int n = WiFi.scanNetworks(false, false, false, 400);
   bool pass = (n >= 0);
   if (pass) {
-    Serial.printf("[TEST] WiFi: PASS (Discovered %d APs)\n", n);
+    cliPrintf("[TEST] WiFi: PASS (Discovered %d APs)\n", n);
     for (int i = 0; i < n && i < 3; i++) {
-      Serial.printf("       -> SSID: %-20s RSSI: %d dBm CH: %d\n",
+      cliPrintf("       -> SSID: %-20s RSSI: %d dBm CH: %d\n",
                     WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
     }
   } else {
-    Serial.println("[TEST] WiFi: FAIL (scan failed)");
+    cliPrintln("[TEST] WiFi: FAIL (scan failed)");
   }
   WiFi.scanDelete();
   WiFi.mode(WIFI_OFF);
@@ -203,11 +175,11 @@ static bool testProbeWiFi() {
 }
 
 static bool testProbeBle() {
-  Serial.println("[TEST] BLE: Starting scan (1s)...");
+  cliPrintln("[TEST] BLE: Starting scan (1s)...");
   ensureBleStackReady();
   NimBLEScan* pScan = NimBLEDevice::getScan();
   if (!pScan) {
-    Serial.println("[TEST] BLE: FAIL (getScan returned null)");
+    cliPrintln("[TEST] BLE: FAIL (getScan returned null)");
     return false;
   }
   pScan->setActiveScan(false);
@@ -219,61 +191,61 @@ static bool testProbeBle() {
   pScan->stop();
   pScan->clearResults();
 
-  Serial.printf("[TEST] BLE: PASS (Discovered %d BLE advertisers)\n", count);
+  cliPrintf("[TEST] BLE: PASS (Discovered %d BLE advertisers)\n", count);
   vTaskDelay(pdMS_TO_TICKS(50));
   return true;
 }
 
 static bool testProbeBattery() {
   float v = readBatteryVoltage();
-  Serial.printf("[TEST] BATTERY: PASS (Voltage: %.2f V)\n", v);
+  cliPrintf("[TEST] BATTERY: PASS (Voltage: %.2f V)\n", v);
   return (v > 2.5f);
 }
 
 static bool testProbePN532() {
   bool ok = checkPN532();
-  Serial.printf("[TEST] PN532: %s (NFC/RFID SPI)\n", ok ? "PASS (Found)" : "FAIL (Not detected)");
+  cliPrintf("[TEST] PN532: %s (NFC/RFID SPI)\n", ok ? "PASS (Found)" : "FAIL (Not detected)");
   return ok;
 }
 
 static bool testProbeGPS() {
   bool ok = checkGPS();
-  Serial.printf("[TEST] GPS: %s (Neo-6M UART2 @ 9600)\n", ok ? "PASS (NMEA active)" : "FAIL (No data on RX5)");
+  cliPrintf("[TEST] GPS: %s (Neo-6M UART2 @ 9600)\n", ok ? "PASS (NMEA active)" : "FAIL (No data on RX5)");
   return ok;
 }
 
 static bool testProbeIR() {
   bool ok = checkIR();
-  Serial.printf("[TEST] IR: %s (TSOP/VS1838 Pin 21)\n", ok ? "PASS (Sensor idle high)" : "FAIL (No sensor / Low)");
+  cliPrintf("[TEST] IR: %s (TSOP/VS1838 Pin 21)\n", ok ? "PASS (Sensor idle high)" : "FAIL (No sensor / Low)");
   return ok;
 }
 
 static bool testProbeI2C() {
   bool ok = checkI2C();
-  Serial.printf("[TEST] I2C: %s (PCF8574 on SDA1/SCL2)\n", ok ? "PASS (ACK received)" : "FAIL (No I2C response)");
+  cliPrintf("[TEST] I2C: %s (PCF8574 on SDA1/SCL2)\n", ok ? "PASS (ACK received)" : "FAIL (No I2C response)");
   return ok;
 }
 
 void serialAutomationRunDiag() {
-  Serial.println("================== HARDWARE PROBE & DIAGNOSTICS ==================");
-  Serial.printf("[CHIP] ESP32-S3 rev %d, Cores: %d, CPU: %u MHz\n",
+  cliPrintln("================== HARDWARE PROBE & DIAGNOSTICS ==================");
+  cliPrintf("[CHIP] ESP32-S3 rev %d, Cores: %d, CPU: %u MHz\n",
                 ESP.getChipRevision(), ESP.getChipCores(), ESP.getCpuFreqMHz());
-  Serial.printf("[FLASH] Size: %u MB, Speed: %u MHz, Mode: %d\n",
+  cliPrintf("[FLASH] Size: %u MB, Speed: %u MHz, Mode: %d\n",
                 ESP.getFlashChipSize() / (1024 * 1024), ESP.getFlashChipSpeed() / 1000000, ESP.getFlashChipMode());
   serialAutomationDumpHeap();
 
   // I2C bus scan
-  Serial.print("[I2C] Scanning Wire (0x08..0x77): ");
+  cliPrint("[I2C] Scanning Wire (0x08..0x77): ");
   int i2cFound = 0;
   for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
-      Serial.printf("0x%02X ", addr);
+      cliPrintf("0x%02X ", addr);
       i2cFound++;
     }
   }
-  if (i2cFound == 0) Serial.print("None");
-  Serial.println();
+  if (i2cFound == 0) cliPrint("None");
+  cliPrintln();
 
   // Test individual buses
   testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
@@ -286,7 +258,7 @@ void serialAutomationRunDiag() {
   testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
-  Serial.println("==================================================================");
+  cliPrintln("==================================================================");
 }
 
 void serialAutomationRunTest(const String& target) {
@@ -317,7 +289,7 @@ void serialAutomationRunTest(const String& target) {
   } else if (t == "HEAP" || t == "MEM") {
     serialAutomationDumpHeap();
   } else if (t == "ALL") {
-    Serial.println("================ STARTING AUTOMATED TEST SUITE ================");
+    cliPrintln("================ STARTING AUTOMATED TEST SUITE ================");
     bool s_sd = testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_nrf = testProbeNrf(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_cc = testProbeCC1101(); vTaskDelay(pdMS_TO_TICKS(50));
@@ -328,21 +300,21 @@ void serialAutomationRunTest(const String& target) {
     bool s_wifi = testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_ble = testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_bat = testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
-    Serial.println("====================== TEST MATRIX SUMMARY ======================");
-    Serial.printf("[RESULT] SD:      %s\n", s_sd ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] NRF24:   %s\n", s_nrf ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] CC1101:  %s\n", s_cc ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] PN532:   %s\n", s_pn ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] GPS:     %s\n", s_gps ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] IR:      %s\n", s_ir ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] I2C:     %s\n", s_i2c ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] WIFI:    %s\n", s_wifi ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] BLE:     %s\n", s_ble ? "PASS" : "FAIL");
-    Serial.printf("[RESULT] BATTERY: %s\n", s_bat ? "PASS" : "FAIL");
+    cliPrintln("====================== TEST MATRIX SUMMARY ======================");
+    cliPrintf("[RESULT] SD:      %s\n", s_sd ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] NRF24:   %s\n", s_nrf ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] CC1101:  %s\n", s_cc ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] PN532:   %s\n", s_pn ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] GPS:     %s\n", s_gps ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] IR:      %s\n", s_ir ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] I2C:     %s\n", s_i2c ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] WIFI:    %s\n", s_wifi ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] BLE:     %s\n", s_ble ? "PASS" : "FAIL");
+    cliPrintf("[RESULT] BATTERY: %s\n", s_bat ? "PASS" : "FAIL");
     serialAutomationDumpHeap();
-    Serial.println("================================================================");
+    cliPrintln("================================================================");
   } else {
-    Serial.printf("[ERR] Unknown test target: %s\n", target.c_str());
+    cliPrintf("[ERR] Unknown test target: %s\n", target.c_str());
   }
 }
 
@@ -354,7 +326,7 @@ static void handleCliCommand(String cmd) {
   upper.toUpperCase();
 
   if (upper == "PING") {
-    Serial.printf("[PONG] uptime=%lu free_heap=%u min_heap=%u\n", millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap());
+    cliPrintf("[PONG] uptime=%lu free_heap=%u min_heap=%u\n", millis(), ESP.getFreeHeap(), ESP.getMinFreeHeap());
   } else if (upper == "HEAP") {
     serialAutomationDumpHeap();
   } else if (upper == "STATUS" || upper == "SCREEN") {
@@ -376,13 +348,13 @@ static void handleCliCommand(String cmd) {
 
     if (pin >= 0) {
       serialAutomationSimulateKey(pin);
-      Serial.printf("[KEY] Injected %s (pin %d)\n", key.c_str(), pin);
+      cliPrintf("[KEY] Injected %s (pin %d)\n", key.c_str(), pin);
     } else {
-      Serial.printf("[KEY] Unknown key: %s\n", key.c_str());
+      cliPrintf("[KEY] Unknown key: %s\n", key.c_str());
     }
   } else if (upper == "EXIT") {
     serialAutomationRequestExit();
-    Serial.println("[EXIT] Exit signal triggered.");
+    cliPrintln("[EXIT] Exit signal triggered.");
   } else if (upper.startsWith("LAUNCH ") || upper.startsWith("NAV ")) {
     int space1 = cmd.indexOf(' ');
     int space2 = cmd.indexOf(' ', space1 + 1);
@@ -392,28 +364,28 @@ static void handleCliCommand(String cmd) {
     int sIdx = (space2 > 0) ? cmd.substring(space2 + 1, (space3 > 0) ? space3 : cmd.length()).toInt() : 0;
     int layer = (space3 > 0) ? cmd.substring(space3 + 1).toInt() : 0;
 
-    Serial.printf("[LAUNCH] Request menu=%d, sub=%d, layer=%d\n", mIdx, sIdx, layer);
+    cliPrintf("[LAUNCH] Request menu=%d, sub=%d, layer=%d\n", mIdx, sIdx, layer);
     if (s_launchCallback) {
       s_launchCallback(mIdx, sIdx, layer);
     }
   } else if (upper == "REBOOT") {
-    Serial.println("[REBOOT] Restarting ESP32...");
+    cliPrintln("[REBOOT] Restarting ESP32...");
     delay(100);
     ESP.restart();
   } else if (upper == "HELP") {
-    Serial.println("--- Serial Automation CLI Commands ---");
-    Serial.println("PING                               - Health pong with heap & uptime");
-    Serial.println("HEAP                               - Detailed memory statistics");
-    Serial.println("STATUS                             - Current UI menu and battery state");
-    Serial.println("DIAG                               - Full hardware bus probe");
-    Serial.println("TEST <WIFI|BLE|NRF|CC1101|SD|BATTERY|ALL> - Run peripheral unit test");
-    Serial.println("KEY <UP|DOWN|LEFT|RIGHT|SELECT>    - Inject virtual button press");
-    Serial.println("LAUNCH <menu_idx> <sub_idx> [layer] - Direct feature launcher");
-    Serial.println("EXIT                               - Immediately exit active tool");
-    Serial.println("REBOOT                             - Software reboot");
-    Serial.println("--------------------------------------");
+    cliPrintln("--- Serial Automation CLI Commands ---");
+    cliPrintln("PING                               - Health pong with heap & uptime");
+    cliPrintln("HEAP                               - Detailed memory statistics");
+    cliPrintln("STATUS                             - Current UI menu and battery state");
+    cliPrintln("DIAG                               - Full hardware bus probe");
+    cliPrintln("TEST <WIFI|BLE|NRF|CC1101|SD|BATTERY|ALL> - Run peripheral unit test");
+    cliPrintln("KEY <UP|DOWN|LEFT|RIGHT|SELECT>    - Inject virtual button press");
+    cliPrintln("LAUNCH <menu_idx> <sub_idx> [layer] - Direct feature launcher");
+    cliPrintln("EXIT                               - Immediately exit active tool");
+    cliPrintln("REBOOT                             - Software reboot");
+    cliPrintln("--------------------------------------");
   } else {
-    Serial.printf("[ERR] Unrecognized command: %s (type HELP)\n", cmd.c_str());
+    cliPrintf("[ERR] Unrecognized command: %s (type HELP)\n", cmd.c_str());
   }
 }
 
@@ -423,8 +395,8 @@ void serialAutomationPoll() {
   if (s_isPolling) return;
   s_isPolling = true;
 
-  while (Serial.available()) {
-    char c = (char)Serial.read();
+  while (Serial.available() || Serial0.available()) {
+    char c = Serial.available() ? (char)Serial.read() : (char)Serial0.read();
     if (c == '\r') continue;
     if (c == '\n') {
       if (s_rxLine.length() > 0) {
@@ -452,5 +424,5 @@ static void serialAutomationTask(void* pvParameters) {
 void serialAutomationInit() {
   s_rxLine.reserve(128);
   xTaskCreatePinnedToCore(serialAutomationTask, "serial_cli", 4096, NULL, 1, NULL, tskNO_AFFINITY);
-  Serial.println("[CLI] Serial Automation CLI active on COM port");
+  cliPrintln("[CLI] Serial Automation CLI active on COM port");
 }

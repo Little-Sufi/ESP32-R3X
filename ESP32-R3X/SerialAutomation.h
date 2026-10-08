@@ -4,6 +4,10 @@
 void serialAutomationInit();
 void serialAutomationPoll();
 
+void cliPrint(const String& s);
+void cliPrintln(const String& s = "");
+void cliPrintf(const char* format, ...);
+
 // Virtual buttons for automation injection
 bool isSerialButtonPressed(int buttonPin);
 bool isSerialButtonPressedEdge(int buttonPin);
