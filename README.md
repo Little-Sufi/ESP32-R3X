@@ -127,8 +127,8 @@ The table below details the hardware pin configuration for the ESP32-R3X hardwar
 | | CE 2 / CSN 2 | **GPIO 47 / GPIO 48** | Secondary Module (Dual-Transceiver) |
 | | CE 3 / CSN 3 | **GPIO 14 / GPIO 21** | Scanner & MouseJack Module |
 | **RFID / NFC (PN532)** | PN_SCK | **GPIO 12** | PN532 SPI Clock |
-| | PN_MISO | **GPIO 11** | PN532 MISO (Optimized SPI routing) |
-| | PN_MOSI | **GPIO 13** | PN532 MOSI (Optimized SPI routing) |
+| | PN_MOSI | **GPIO 11** | Shared Secondary SPI MOSI |
+| | PN_MISO | **GPIO 13** | Shared Secondary SPI MISO |
 | | PN_SS | **GPIO 5** | PN532 Slave Select |
 | **GPS (NEO-6M)** | GPS_RX | **GPIO 5** | ESP32 TX -> GPS RX (UART2) |
 | | GPS_TX | **GPIO 6** | GPS TX -> ESP32 RX (UART2) |

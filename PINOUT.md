@@ -43,8 +43,8 @@
 | | CE 3 | GPIO 14 | GPIO Out | Scanner / MouseJack CE |
 | | CSN 3 | GPIO 21 | GPIO Out | Scanner / MouseJack CSN |
 | **PN532 RFID/NFC Module** | SCK | GPIO 12 | SPI (Shared) | PN532 Clock |
-| | MISO | GPIO 11 | SPI (Shared) | High-speed bus routing |
-| | MOSI | GPIO 13 | SPI (Shared) | High-speed bus routing |
+| | MOSI | GPIO 11 | SPI (Shared) | Shared Secondary SPI MOSI |
+| | MISO | GPIO 13 | SPI (Shared) | Shared Secondary SPI MISO |
 | | SS (CS) | GPIO 5 | GPIO Out | Active LOW |
 | **NEO-6M GPS Module** | RX (to GPS TX)| GPIO 5 | UART2 RX | 9600 Baud NMEA |
 | | TX (to GPS RX)| GPIO 6 | UART2 TX | 9600 Baud NMEA |
