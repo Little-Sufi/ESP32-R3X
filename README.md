@@ -25,6 +25,18 @@
 
 ---
 
+## 📚 Official Documentation & Wiki
+
+Detailed guides, tutorials, and pinouts are available in the **[ESP32-R3X Wiki](wiki/Home.md)**:
+
+* 🔌 **[Hardware & Schematics Guide](wiki/Hardware-and-Schematics.md)** — Comprehensive pin mapping for all modules (ILI9341, XPT2046, CC1101, NRF24, PN532, GPS, IR, PCF8574).
+* 🛠️ **[Installation & Configuration Guide](wiki/Installation-and-Configuration.md)** — Step-by-step setup in Arduino IDE 2.x and flashing precompiled binaries.
+* 📻 **[Sub-GHz RF Exploration Guide](wiki/SubGHz-RF-Guide.md)** — Detailed manual for CC1101 replay attacks, jamming, De Bruijn brute-force, and RSSI analysis.
+* 📡 **[Wi-Fi & Bluetooth Tools](wiki/WiFi-and-BLE-Tools.md)** — Full documentation of offensive and defensive 802.11 and BLE utilities.
+* ❓ **[Troubleshooting & FAQ](wiki/Troubleshooting-and-FAQ.md)** — Hardware bring-up, CC1101 timeout protection, and touch calibration fixes.
+
+---
+
 ## 📖 Overview
 
 **ESP32-R3X** is a premier open-source multi-band wireless exploration and penetration testing firmware. Combining Wi-Fi, Bluetooth Low Energy, 2.4GHz ESB, Sub-GHz RF, RFID/NFC, GPS Wardriving, Infrared, and BadUSB into a single portable platform, ESP32-R3X provides security researchers with unmatched capabilities in a sleek, touchscreen-driven cyber interface.
