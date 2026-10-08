@@ -29,7 +29,7 @@
 
 Detailed guides, tutorials, and pinouts are available in the **[ESP32-R3X Wiki](wiki/Home.md)**:
 
-* 🔌 **[Hardware & Schematics Guide](wiki/Hardware-and-Schematics.md)** — Comprehensive pin mapping for all modules (MicroSD Storage, ILI9341 Display, XPT2046 Touch, CC1101, NRF24 Hub, PN532, GPS, IR, PCF8574). See also **[Schematic Directory](Schematic/README.md)**.
+* 🔌 **[Hardware & Schematics Guide](wiki/Hardware-and-Schematics.md)** — Comprehensive pin mapping for all modules. See also the **[Complete Visual Wiring Diagram & Schematics](Schematic/WIRING_DIAGRAM.md)**.
 * 🛠️ **[Installation & Configuration Guide](wiki/Installation-and-Configuration.md)** — Step-by-step setup in Arduino IDE 2.x and flashing precompiled binaries.
 * 📻 **[Sub-GHz RF Exploration Guide](wiki/SubGHz-RF-Guide.md)** — Detailed manual for CC1101 replay attacks, jamming, De Bruijn brute-force, and RSSI analysis.
 * 📡 **[Wi-Fi & Bluetooth Tools](wiki/WiFi-and-BLE-Tools.md)** — Full documentation of offensive and defensive 802.11 and BLE utilities.
@@ -89,6 +89,41 @@ All graphics, animations, and interfaces feature the custom **R3X Cyber Engine**
 ### 🔴 Infrared (IR)
 - **Universal Remote (TV-B-Gone)**: Rapid cycling of common television and projector power codes.
 - **IR Learning & Replay**: Record 38kHz remote control commands and playback on demand.
+
+---
+
+## 🎯 System Architecture
+
+ESP32-R3X integrates 12 specialized wireless, RF, storage, and peripheral subsystems across an isolated dual-bus architecture:
+
+```text
+                                       ┌────────────────────────────────────────┐
+                                       │   ESP32-S3 (Dual-Core LX7 @ 240MHz)    │
+                                       │   Native USB-OTG + 2.4GHz WiFi / BLE   │
+                                       └───────────────────┬────────────────────┘
+                                                           │
+        ┌───────────────────┬──────────────────────────────┼──────────────────────────────┬───────────────────┐
+        │                   │                              │                              │                   │
+        ▼ (HSPI3 @ 40MHz)   ▼ (SPI2 Shared Bus)            ▼ (Dedicated GPIO / I2C)       ▼ (UART2 @ 9600)    ▼ (Internal RF)
+ ┌───────────────┐   ┌───────────────────────────┐  ┌───────────────────────────┐  ┌───────────────┐   ┌───────────────┐
+ │ ILI9341 2.8"  │   │  CC1101 Sub-GHz (300-928) │  │ IR Transceiver 38kHz      │  │ NEO-6M GPS    │   │ 802.11 b/g/n  │
+ │ TFT Display   │   │  CS:5, G0:6, G2:3         │  │ TX:14 (PWM) / RX:21 (TSOP)│  │ RX:5 / TX:6   │   │ Wi-Fi +       │
+ │ CS:17, DC:16  │   ├───────────────────────────┤  ├───────────────────────────┤  │ (Wardriving)  │   │ Bluetooth 5.0 │
+ ├───────────────┤   │  NRF24L01+ 2.4GHz HUB     │  │ PCF8574 Navigation I2C   │  └───────────────┘   │ BLE / AirTag  │
+ │ XPT2046 Touch │   │  Slot 1: CE:15 / CSN:4    │  │ SDA:1, SCL:2 (0x20/0x38)  │                      └───────────────┘
+ │ Controller    │   │  Slot 2: CE:47 / CSN:48   │  │ 5-Key Tactile Matrix      │
+ │ CS:18         │   │  Slot 3: CE:14 / CSN:21   │  └───────────────────────────┘
+ ├───────────────┤   ├───────────────────────────┤
+ │ LED Backlight │   │  MicroSD Card Storage     │
+ │ SI2302 PWM:7  │   │  CS:10, CD:38 (FAT32)     │
+ └───────────────┘   ├───────────────────────────┤
+                     │  PN532 RFID / NFC 13.56M  │
+                     │  SS:5 (ISO14443A Reader)  │
+                     └───────────────────────────┘
+```
+
+> [!TIP]
+> For the complete circuit schematic with all resistors, decoupling capacitors, and noise suppression guidelines, see the **[Complete Visual Wiring Diagram](Schematic/WIRING_DIAGRAM.md)**.
 
 ---
 

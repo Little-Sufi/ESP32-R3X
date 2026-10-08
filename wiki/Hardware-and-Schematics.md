@@ -2,6 +2,9 @@
 
 ESP32-R3X is fully engineered for the **ESP32-R3X S3 Hardware Platform** on the high-performance ESP32-S3 microcontroller.
 
+> [!TIP]
+> For the complete circuit diagram with all resistors, capacitors, RF decoupling guidelines, and visual schematic wiring, consult the **[Complete Visual Wiring Diagram & Schematic Specification](../Schematic/WIRING_DIAGRAM.md)**.
+
 ---
 
 ## 📋 Comprehensive Pin Allocation

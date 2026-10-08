@@ -18,21 +18,32 @@ Welcome to the official documentation for **ESP32-R3X** — an advanced multi-ba
 
 ## 🎯 Architecture Overview
 
-ESP32-R3X integrates eight specialized wireless & peripheral subsystems on a single unified platform:
+ESP32-R3X integrates 12 specialized wireless, RF, storage, and peripheral subsystems on a high-speed unified dual-bus architecture:
 
 ```text
-                               ┌─────────────────────────────────┐
-                               │     ESP32-S3 (240MHz Dual-Core) │
-                               └────────────────┬────────────────┘
-                                                │
-         ┌───────────────┬──────────────────────┼──────────────────────┬────────────────┐
-         ▼               ▼                      ▼                      ▼                ▼
-   ┌───────────┐   ┌───────────┐          ┌───────────┐          ┌───────────┐    ┌───────────┐
-   │  CC1101   │   │ NRF24L01+ │          │  ILI9341  │          │   PN532   │    │  NEO-6M   │
-   │  Sub-GHz  │   │  2.4 GHz  │          │ Display & │          │  13.56MHz │    │    GPS    │
-   │  300-928M │   │ Enhanced  │          │  XPT2046  │          │  RFID/NFC │    │  UART2    │
-   │   (SPI)   │   │ ShockBurst│          │  (HSPI3)  │          │   (SPI)   │    │ (GPIO5/6) │
-   └───────────┘   └───────────┘          └───────────┘          └───────────┘    └───────────┘
+                                       ┌────────────────────────────────────────┐
+                                       │   ESP32-S3 (Dual-Core LX7 @ 240MHz)    │
+                                       │   Native USB-OTG + 2.4GHz WiFi / BLE   │
+                                       └───────────────────┬────────────────────┘
+                                                           │
+        ┌───────────────────┬──────────────────────────────┼──────────────────────────────┬───────────────────┐
+        │                   │                              │                              │                   │
+        ▼ (HSPI3 @ 40MHz)   ▼ (SPI2 Shared Bus)            ▼ (Dedicated GPIO / I2C)       ▼ (UART2 @ 9600)    ▼ (Internal RF)
+ ┌───────────────┐   ┌───────────────────────────┐  ┌───────────────────────────┐  ┌───────────────┐   ┌───────────────┐
+ │ ILI9341 2.8"  │   │  CC1101 Sub-GHz (300-928) │  │ IR Transceiver 38kHz      │  │ NEO-6M GPS    │   │ 802.11 b/g/n  │
+ │ TFT Display   │   │  CS:5, G0:6, G2:3         │  │ TX:14 (PWM) / RX:21 (TSOP)│  │ RX:5 / TX:6   │   │ Wi-Fi +       │
+ │ CS:17, DC:16  │   ├───────────────────────────┤  ├───────────────────────────┤  │ (Wardriving)  │   │ Bluetooth 5.0 │
+ ├───────────────┤   │  NRF24L01+ 2.4GHz HUB     │  │ PCF8574 Navigation I2C   │  └───────────────┘   │ BLE / AirTag  │
+ │ XPT2046 Touch │   │  Slot 1: CE:15 / CSN:4    │  │ SDA:1, SCL:2 (0x20/0x38)  │                      └───────────────┘
+ │ Controller    │   │  Slot 2: CE:47 / CSN:48   │  │ 5-Key Tactile Matrix      │
+ │ CS:18         │   │  Slot 3: CE:14 / CSN:21   │  └───────────────────────────┘
+ ├───────────────┤   ├───────────────────────────┤
+ │ LED Backlight │   │  MicroSD Card Storage     │
+ │ SI2302 PWM:7  │   │  CS:10, CD:38 (FAT32)     │
+ └───────────────┘   ├───────────────────────────┤
+                     │  PN532 RFID / NFC 13.56M  │
+                     │  SS:5 (ISO14443A Reader)  │
+                     └───────────────────────────┘
 ```
 
 ---
