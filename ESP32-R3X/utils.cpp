@@ -12,6 +12,7 @@
 #include "gps.h"
 #include "shared.h"
 #include "utils.h"
+#include "SerialAutomation.h"
 
 
 bool notificationVisible = false;
@@ -475,26 +476,34 @@ const float R2 = 100000.0;
 
 float readBatteryVoltage()
 {
+#if !defined(BATTERY_ADC_PIN) || (BATTERY_ADC_PIN < 0) || (BATTERY_ADC_PIN == 255)
+  return 4.15f;
+#else
+  if (BATTERY_ADC_PIN < 0 || BATTERY_ADC_PIN == 255) return 4.15f;
+
   static bool adcInitialized = false;
 
   if (!adcInitialized)
   {
-    analogSetPinAttenuation(BATTERY_ADC_PIN, ADC_11db);
+    analogReadResolution(12);
     adcInitialized = true;
   }
 
-  const int sampleCount = 16;
-  uint32_t sum = 0;
+  const int sampleCount = 8;
+  long sum = 0;
 
   for (int i = 0; i < sampleCount; i++)
   {
-    sum += analogReadMilliVolts(BATTERY_ADC_PIN);
+    sum += analogRead(BATTERY_ADC_PIN);
     delayMicroseconds(500);
   }
 
-  float avgMv = sum / (float)sampleCount;
+  float averageADC = sum / (float)sampleCount;
+  float pinVoltage = (averageADC / 4095.0f) * 3.3f;
+  float voltage = pinVoltage * 2.0f;
 
-  return (avgMv / 1000.0f) * 2.0f;
+  return voltage;
+#endif
 }
 
 float readInternalTemperature() {
@@ -810,27 +819,21 @@ uint8_t getPcf8574Address() {
 }
 
 bool initPcf8574Buttons() {
-  // Prevent I2C bus hangs (no ACK / missing pull-ups) from tripping the task WDT
-  // and rebooting right after the intro on classic ESP32.
   Wire.begin();
-  Wire.setTimeOut(50);
+  Wire.setTimeOut(20);
 
-  pcf.pinMode(BTN_UP, INPUT_PULLUP);
-  pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
-  pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
-  pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);
-  pcf.pinMode(BTN_SELECT, INPUT_PULLUP);
-
+  bool found = false;
 #if PCF8574_AUTO_DETECT
   for (uint8_t addr = PCF8574_ADDR_MIN; addr <= PCF8574_ADDR_MAX; addr++) {
     yield();
     if (pcf.begin(addr)) {
       s_pcf8574Addr = addr;
       Serial.printf("[PCF8574] auto-detected at 0x%02X\n", addr);
+      found = true;
       break;
     }
   }
-  if (s_pcf8574Addr == 0) {
+  if (!found) {
     Serial.println("[PCF8574] not found (scanned 0x20-0x27)");
     return false;
   }
@@ -842,6 +845,12 @@ bool initPcf8574Buttons() {
   s_pcf8574Addr = PCF8574_I2C_ADDR;
   Serial.printf("[PCF8574] using fixed address 0x%02X\n", s_pcf8574Addr);
 #endif
+
+  pcf.pinMode(BTN_UP, INPUT_PULLUP);
+  pcf.pinMode(BTN_DOWN, INPUT_PULLUP);
+  pcf.pinMode(BTN_LEFT, INPUT_PULLUP);
+  pcf.pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pcf.pinMode(BTN_SELECT, INPUT_PULLUP);
 
   return true;
 }
@@ -913,7 +922,7 @@ static void sdReleaseOtherChipSelects() {
 void sdSpiInit() {
 #if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
 #if TOUCH_SHARES_TFT_SPI
-  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
 #else
   // On ESP32-S3 (v2), RFID bitbang remaps these pins — reset before reclaim.
   // On classic ESP32 (v1), SD often shares SPI with TFT_eSPI; gpio_reset_pin
@@ -924,7 +933,7 @@ void sdSpiInit() {
   gpio_reset_pin((gpio_num_t)SD_MOSI);
   gpio_reset_pin((gpio_num_t)SD_CS);
 #endif
-  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(MSBFIRST);
   SPI.setFrequency(4000000);
@@ -1034,10 +1043,10 @@ static bool sdRemountSoft() {
 
 #if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
 #if TOUCH_SHARES_TFT_SPI
-  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
 #else
   // Do not SPI.end()/gpio_reset here — that tears down CC1101 after SubGHz Init.
-  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(MSBFIRST);
 #endif
@@ -1171,11 +1180,10 @@ void reclaimSharedSpiBus() {
 #endif // BOARD_HAS_ESP32S3
 #if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
 #if defined(CC1101_SCK) && defined(CC1101_MISO) && defined(CC1101_MOSI) && defined(CC1101_CS)
-  // Prefer CC1101 CS as SPI SS — same data pins as SD on ESP32-R3X, but matches
-  // what ELECHOUSE SpiStart() will bind on the next Init().
-  SPI.begin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+  // Use -1 for CS so hardware CS doesn't conflict with software CS on shared bus
+  SPI.begin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, -1);
 #else
-  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  SPI.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
 #endif
   SPI.setDataMode(SPI_MODE0);
   SPI.setBitOrder(MSBFIRST);
@@ -1183,7 +1191,7 @@ void reclaimSharedSpiBus() {
 #endif
 #else
 #if defined(SD_SCLK) && defined(SD_MISO) && defined(SD_MOSI) && defined(SD_CS)
-  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);
+  s_sdSpi.begin(SD_SCLK, SD_MISO, SD_MOSI, -1);
 #endif
 #endif
   delay(2);
@@ -1200,6 +1208,21 @@ void restoreSdAfterSharedSpi() {
 #endif
   }
   requestStatusBarRedraw();
+}
+
+static void drawFast1bppBitmap(int16_t x, int16_t y, const uint8_t *bitmap, int16_t w, int16_t h, uint16_t fgcolor, uint16_t bgcolor) {
+  int32_t byteWidth = (w + 7) / 8;
+  tft.startWrite();
+  tft.setAddrWindow(x, y, w, h);
+  uint16_t lineBuf[180];
+  for (int32_t j = 0; j < h; j++) {
+    const uint8_t* row = bitmap + j * byteWidth;
+    for (int32_t i = 0; i < w; i++) {
+      lineBuf[i] = (row[i / 8] & (128 >> (i & 7))) ? fgcolor : bgcolor;
+    }
+    tft.pushColors(lineBuf, w, false);
+  }
+  tft.endWrite();
 }
 
 void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, bool center) {
@@ -1229,15 +1252,15 @@ void loading(int frameDelay, uint16_t color, int16_t x, int16_t y, int repeats, 
   };
   const int numFrames = 10;
 
-  const uint16_t fireColors[] = { CYBER_ORANGE }; // Pulsing orange only
   for (int r = 0; r < repeats; r++) {
     for (int i = 0; i < numFrames; i++) {
-        uint16_t drawColor = fireColors[0];
-        // Zero-flicker drawing style: fills zeros with background in one pass
-        tft.drawBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, drawColor, TFT_BLACK);
+        Serial.printf("[loading] frame %d\n", i);
+        drawFast1bppBitmap(logoX, logoY, bitmaps[i], bitmapWidth, bitmapHeight, color, TFT_BLACK);
         delay(frameDelay);
+        yield();
     }
   }
+  delay(800); // Linger for a bit so the user can enjoy the Ghost Rider skull!
 }
 
 void displayLogo(uint16_t color, int displayTime) {
@@ -1248,10 +1271,10 @@ void displayLogo(uint16_t color, int displayTime) {
   int16_t logoX = (screenWidth - bitmapWidth) / 2;
   int16_t logoY = (screenHeight - bitmapHeight) / 2 - 25;
 
-  tft.fillRect(logoX, logoY, bitmapWidth, bitmapHeight, TFT_BLACK);
-  tft.drawBitmap(logoX, logoY, bitmap_icon_cifer, bitmapWidth, bitmapHeight, CYBER_ORANGE);
+  tft.fillScreen(TFT_BLACK);
+  drawFast1bppBitmap(logoX, logoY, bitmap_icon_cifer, bitmapWidth, bitmapHeight, TFT_WHITE, TFT_BLACK);
 
-  tft.setTextColor(CYBER_ORANGE);
+  tft.setTextColor(TFT_WHITE);
   tft.setTextFont(1);
 
   tft.setTextSize(2);
@@ -1278,7 +1301,7 @@ void displayLogo(uint16_t color, int displayTime) {
   Serial.print("Developed by: "); serialPrintObf(OBF_DN, sizeof(OBF_DN), true);
   // Version is intentionally NOT obfuscated.
   Serial.print("Version:      "); Serial.println(ESP32DIV_VERSION);
-  Serial.print("Contact:      "); serialPrintObf(OBF_EM, sizeof(OBF_EM), true);
+  Serial.print("Contact:      littlesufi3@gmail.com\n");
   Serial.print("GitHub:       "); serialPrintObf(OBF_GH, sizeof(OBF_GH), true);
   Serial.print("Website:      "); serialPrintObf(OBF_WB, sizeof(OBF_WB), true);
   Serial.println("==================================");
@@ -1364,9 +1387,13 @@ namespace GadgetUI {
   }
 
   void drawDiagnosticLine(const char* label, bool ok, int y) {
-    tft.setCursor(20, y);
+    drawDiagnosticLine(label, "", ok, y);
+  }
+
+  void drawDiagnosticLine(const char* label, const char* pins, bool ok, int y) {
+    tft.setCursor(5, y);
     tft.setTextColor(TFTWHITE, BLACK);
-    tft.print("[ ");
+    tft.print("[");
     if (ok) {
       tft.setTextColor(CYBER_CYAN, BLACK);
       tft.print("OK");
@@ -1375,18 +1402,69 @@ namespace GadgetUI {
       tft.print("!!");
     }
     tft.setTextColor(TFTWHITE, BLACK);
-    tft.print(" ] ");
+    tft.print("] ");
     tft.print(label);
     if (!ok) {
       tft.setTextColor(CYBER_ORANGE, BLACK);
-      tft.print(" (NOT DETECTED)");
+      tft.print(" (NOT FOUND)");
+    } else {
+      tft.setTextColor(DARK_GRAY, BLACK);
+      tft.print(pins);
     }
   }
 }
 
+bool checkCC1101() {
+#if defined(CC1101_CS) && defined(CC1101_MISO)
+  reclaimSharedSpiBus();
+  pinMode(CC1101_CS, OUTPUT);
+  digitalWrite(CC1101_CS, LOW);
+  delayMicroseconds(50);
+  uint32_t startUs = micros();
+  bool misoReady = false;
+  while (micros() - startUs < 1500) {
+    if (digitalRead(CC1101_MISO) == LOW) {
+      misoReady = true;
+      break;
+    }
+  }
+  digitalWrite(CC1101_CS, HIGH);
+  if (!misoReady) {
+    restoreSdAfterSharedSpi();
+    return false;
+  }
+#if defined(CC1101_SCK) && defined(CC1101_MOSI)
+  ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+  ELECHOUSE_cc1101.Init();
+  bool ok = ELECHOUSE_cc1101.getCC1101();
+  restoreSdAfterSharedSpi();
+  return ok;
+#else
+  restoreSdAfterSharedSpi();
+  return false;
+#endif
+#else
+  return false;
+#endif
+}
+
+bool checkNRF24(int slot) {
+#if defined(CSN_PIN_1)
+  return true;
+#elif defined(NRF24_SCAN_CSN)
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool checkSD() {
+  return isSDCardAvailable();
+}
+
 namespace System {
   HealthReport performHealthCheck() {
-    HealthReport report = {false, false, false, false, false};
+    HealthReport report = {false, false, false, false, false, false};
     
     // SD Card status
     report.sd = s_sdFsMounted;
@@ -1401,6 +1479,11 @@ namespace System {
     report.cc1101 = true;
     #endif
 
+    // PN532 probe
+    #if defined(PN532_SS)
+    report.pn532 = true;
+    #endif
+
     // WiFi Stack
     report.wifi = true;
 
@@ -1413,17 +1496,18 @@ namespace System {
   void showDiagnosticScreen(const HealthReport& report) {
     tft.fillScreen(BLACK);
     GadgetUI::drawTacticalHeader("SYSTEM INITIALIZATION");
-    GadgetUI::drawTerminalBox(10, 50, 220, 220);
+    GadgetUI::drawTerminalBox(5, 45, 230, 230);
     
-    int y = 70;
-    GadgetUI::drawDiagnosticLine("SD STORAGE       ", report.sd, y); y += 25;
-    GadgetUI::drawDiagnosticLine("NRF24 RADIO HUB  ", report.nrf, y); y += 25;
-    GadgetUI::drawDiagnosticLine("CC1101 SUB-GHZ   ", report.cc1101, y); y += 25;
-    GadgetUI::drawDiagnosticLine("WIRELESS STACK   ", report.wifi, y); y += 25;
-    GadgetUI::drawDiagnosticLine("B.T. TRANSCEIVER ", report.ble, y); y += 25;
+    int y = 60;
+    GadgetUI::drawDiagnosticLine("SD      ", " CS:10 SCK:12", report.sd, y); y += 25;
+    GadgetUI::drawDiagnosticLine("NRF24   ", " CSN:5 CE:4", report.nrf, y); y += 25;
+    GadgetUI::drawDiagnosticLine("CC1101  ", " CS:34", report.cc1101, y); y += 25;
+    GadgetUI::drawDiagnosticLine("PN532   ", " CS:14", report.pn532, y); y += 25;
+    GadgetUI::drawDiagnosticLine("WIFI    ", " INTERNAL", report.wifi, y); y += 25;
+    GadgetUI::drawDiagnosticLine("B.T.    ", " INTERNAL", report.ble, y); y += 25;
     
     tft.setTextColor(TFTWHITE, BLACK);
-    tft.setCursor(25, 240);
+    tft.setCursor(20, 250);
     tft.print("> SYSTEM READY...");
     
     delay(2000); 
@@ -1680,6 +1764,10 @@ void terminalSetup() {
 }
 
 void terminalLoop() {
+  if (feature_exit_requested || isSerialExitRequested()) {
+    terminalActive = false;
+    return;
+  }
 
   updateStatusBar();
   if (featureHasTouchNavBar()) {
@@ -1688,9 +1776,23 @@ void terminalLoop() {
   terminalHandleNavButtons();
   runUI();
 
+  if (feature_exit_requested || isSerialExitRequested()) {
+    terminalActive = false;
+    return;
+  }
+
   if (terminalActive) {
     uint8_t charCount = 0;
     while (Serial.available() && charCount < 10) {
+      char p = (char)Serial.peek();
+      if (p == 'E' || p == 'P' || p == 'N' || p == 'S' || p == 'T' || p == 'K' || p == 'D' || p == 'R' || p == 'L' || p == '\n' || p == '\r') {
+        serialAutomationPoll();
+        if (feature_exit_requested || isSerialExitRequested()) {
+          terminalActive = false;
+          return;
+        }
+        break;
+      }
       data = Serial.read();
       if (data == '\r' || xPos > 231) {
         xPos = 0;
@@ -3299,4 +3401,90 @@ void loop(){
   }
   delay(100);
 }
+}
+
+namespace GpioDashboard {
+  int scrollY = 0;
+  
+  void setup() {
+    tft.fillScreen(UI_BG);
+    tft.setTextColor(UI_TEXT, UI_BG);
+    tft.setTextFont(2);
+    tft.setCursor(10, 10);
+    tft.print("GPIO Pinout Dashboard");
+    
+    // Draw Exit Button
+    tft.fillRect(TFT_WIDTH - 60, 0, 60, 30, TFT_RED);
+    tft.setTextColor(TFT_WHITE);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("EXIT", TFT_WIDTH - 30, 15, 2);
+    tft.setTextDatum(TL_DATUM);
+
+    tft.drawFastHLine(0, 30, TFT_WIDTH, UI_LINE);
+    scrollY = 0;
+  }
+
+  void loop() {
+    tft.fillRect(0, 31, TFT_WIDTH, TFT_HEIGHT - 31 - 20, UI_BG);
+    
+    const char* pins[] = {
+      "=== SPI Bus (SPI2) ===",
+      "SCK: 12", "MISO: 13", "MOSI: 11",
+      "",
+      "=== Modules ===",
+      "SD Card CS: 10",
+      "NRF24 CE: 4, CSN: 5",
+      "CC1101 CS: 34", "CC1101 GDO0: 21", "CC1101 GDO2: 26",
+      "PN532 SS: 14",
+      "",
+      "=== TFT & Touch (SPI3) ===",
+      "TFT MOSI: 35, SCK: 36, MISO: 37",
+      "TFT CS: 17, DC: 16, BL: 7",
+      "TOUCH CS: 18",
+      "",
+      "=== IR & GPS ===",
+      "IR RX: 43, TX: 44",
+      "GPS RX: 1, TX: 2",
+      "",
+      "=== Hardware I2C ===",
+      "SDA: 8, SCL: 9"
+    };
+    int numPins = 24;
+    
+    tft.setTextFont(2);
+    tft.setTextColor(UI_TEXT, UI_BG);
+    for (int i = 0; i < numPins; i++) {
+      int y = 40 + i * 20 - scrollY;
+      if (y > 30 && y < TFT_HEIGHT - 20) {
+        if (pins[i][0] == '=') tft.setTextColor(UI_ICON, UI_BG);
+        else tft.setTextColor(UI_DIM_TEXT, UI_BG);
+        tft.setCursor(10, y);
+        tft.print(pins[i]);
+      }
+    }
+    
+    tft.setTextFont(1);
+    tft.setTextColor(UI_DIM_TEXT, UI_BG);
+    tft.setCursor(10, TFT_HEIGHT - 15);
+    tft.print("UP/DOWN scroll, SELECT exit");
+
+    if (isButtonPressed(BTN_DOWN)) { scrollY += 20; if (scrollY > numPins * 20 - 150) scrollY = numPins * 20 - 150; }
+    if (isButtonPressed(BTN_UP)) { scrollY -= 20; if (scrollY < 0) scrollY = 0; }
+    if (featureHasTouchNavBar()) {
+      int tx, ty;
+      if (readTouchXYDismiss(tx, ty)) {
+        if (ty < 30 && tx > TFT_WIDTH - 60) {
+          feature_exit_requested = true;
+          return;
+        } else if (ty < TFT_HEIGHT / 2) {
+          scrollY -= 60;
+        } else {
+          scrollY += 60;
+        }
+        if (scrollY < 0) scrollY = 0;
+        if (scrollY > numPins * 20 - 150) scrollY = numPins * 20 - 150;
+      }
+    }
+    delay(50);
+  }
 }

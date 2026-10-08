@@ -5,108 +5,95 @@
 extern TFT_eSPI tft;
 
 #if defined(BOARD_CYD) || defined(BOARD_ESP32_DIV_V1)
-// Dedicated VSPI bus for XPT2046 — must not share HSPI with TFT_eSPI on classic ESP32.
+// Dedicated VSPI bus for XPT2046 on classic ESP32.
 SPIClass touchscreenSPI = SPIClass(VSPI);
+#elif BOARD_HAS_ESP32S3
+// ESP32-S3 uses native TFT_eSPI SPI sharing for touch. Keep touchscreenSPI on dummy HSPI so it never touches FSPI.
+SPIClass touchscreenSPI = SPIClass(HSPI);
 #else
 SPIClass touchscreenSPI = SPIClass(HSPI);
 #endif
 
-#ifndef XPT2046_IRQ
-#define XPT2046_IRQ 255
-#endif
-
-XPT2046_Touchscreen ts(XPT2046_CS, XPT2046_IRQ);
+XPT2046_Touchscreen ts(XPT2046_CS);
 bool feature_active = false;
 
 static bool s_touchInitialized = false;
 
 #ifndef TOUCH_ROTATION
-#if defined(BOARD_ESP32_DIV_V2)
 #define TOUCH_ROTATION 0
-#else
-#define TOUCH_ROTATION TFT_ROTATION
 #endif
-#endif
-
-#if TOUCH_SHARES_TFT_SPI
-static void applyTouchRotation(int16_t rawX, int16_t rawY, int16_t& x, int16_t& y) {
-  switch (TOUCH_ROTATION) {
-    case 0: x = 4095 - rawY; y = rawX; break;
-    case 1: x = rawX; y = rawY; break;
-    case 2: x = rawY; y = 4095 - rawX; break;
-    default: x = 4095 - rawX; y = 4095 - rawY; break;
-  }
-}
-
-static bool readSharedTouchSample(int16_t& x, int16_t& y, int16_t& z, uint16_t zThresh) {
-  if (!s_touchInitialized) {
-    return false;
-  }
-
-  tft.endWrite();
-  z = (int16_t)tft.getTouchRawZ();
-  if (z < (int16_t)zThresh) {
-    x = 0;
-    y = 0;
-    return false;
-  }
-
-  uint16_t rawX = 0;
-  uint16_t rawY = 0;
-  tft.getTouchRaw(&rawX, &rawY);
-  applyTouchRotation((int16_t)rawX, (int16_t)rawY, x, y);
-  return true;
-}
-#endif
-
-static void ensureTouchSpiReady() {
-#if !TOUCH_SHARES_TFT_SPI
-  touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
-#endif
-}
-
-static bool touchSampleOk(uint16_t zThresh, int16_t& rawX, int16_t& rawY) {
-#if TOUCH_SHARES_TFT_SPI
-  int16_t z = 0;
-  return readSharedTouchSample(rawX, rawY, z, zThresh);
-#else
-  ensureTouchSpiReady();
-#if defined(XPT2046_IRQ) && (XPT2046_IRQ < 255)
-  if (!ts.tirqTouched()) {
-    return false;
-  }
-#endif
-  if (!ts.touched()) {
-    return false;
-  }
-  TS_Point p = ts.getPoint();
-  if (p.z < (int16_t)zThresh) {
-    return false;
-  }
-  rawX = p.x;
-  rawY = p.y;
-  return true;
-#endif
-}
 
 void setupTouchscreen() {
   if (s_touchInitialized) {
     return;
   }
 
-#if TOUCH_SHARES_TFT_SPI
   pinMode(XPT2046_CS, OUTPUT);
   digitalWrite(XPT2046_CS, HIGH);
-#else
-  ensureTouchSpiReady();
+
+#if !BOARD_HAS_ESP32S3
+  touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, -1);
   ts.begin(touchscreenSPI);
+  touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, -1);
   ts.setRotation(TOUCH_ROTATION);
 #endif
 
   s_touchInitialized = true;
+  Serial.printf("[touch] Touch controller ready on CS:%d (native bus sharing)\n", XPT2046_CS);
 }
 
-extern XPT2046_Touchscreen ts;
+static bool touchSampleOk(uint16_t zThresh, int16_t& rawX, int16_t& rawY) {
+  if (!s_touchInitialized) {
+    setupTouchscreen();
+  }
+
+#if BOARD_HAS_ESP32S3
+  uint16_t z = tft.getTouchRawZ();
+  if (z < zThresh || z >= 4000) {
+    return false;
+  }
+  uint16_t rx = 0, ry = 0;
+  tft.getTouchRaw(&rx, &ry);
+  if (rx < 150 || rx > 3950 || ry < 150 || ry > 3950) {
+    return false;
+  }
+  uint16_t rx2 = 0, ry2 = 0;
+  tft.getTouchRaw(&rx2, &ry2);
+  if (abs((int)rx - (int)rx2) > 50 || abs((int)ry - (int)ry2) > 50) {
+    return false;
+  }
+#if TOUCH_ROTATION == 0
+  rawX = (int16_t)rx;
+  rawY = (int16_t)ry;
+#elif TOUCH_ROTATION == 1
+  rawX = (int16_t)ry;
+  rawY = (int16_t)(4095 - rx);
+#elif TOUCH_ROTATION == 2
+  rawX = (int16_t)(4095 - rx);
+  rawY = (int16_t)(4095 - ry);
+#elif TOUCH_ROTATION == 3
+  rawX = (int16_t)(4095 - ry);
+  rawY = (int16_t)rx;
+#else
+  rawX = (int16_t)rx;
+  rawY = (int16_t)ry;
+#endif
+  return true;
+#else
+  if (!ts.touched()) {
+    return false;
+  }
+
+  TS_Point p = ts.getPoint();
+  if (p.z < (int16_t)zThresh) {
+    return false;
+  }
+
+  rawX = p.x;
+  rawY = p.y;
+  return true;
+#endif
+}
 
 bool isTouchDown(uint16_t zThresh) {
   int16_t x = 0;
@@ -124,14 +111,21 @@ bool readTouchRawXY(int16_t& x, int16_t& y, uint16_t zThresh) {
 
 static void mapTouchToScreen(int16_t rawX, int16_t rawY, int& x, int& y) {
   auto& s = settings();
+  uint16_t xMin = (s.touchXMin != 0) ? s.touchXMin : TOUCH_X_MIN;
+  uint16_t xMax = (s.touchXMax != 0) ? s.touchXMax : TOUCH_X_MAX;
+  uint16_t yMin = (s.touchYMin != 0) ? s.touchYMin : TOUCH_Y_MIN;
+  uint16_t yMax = (s.touchYMax != 0) ? s.touchYMax : TOUCH_Y_MAX;
+
 #if defined(BOARD_CYD)
-  // Same axis order as the RNT CYD touch test (no inverted Y).
-  x = ::map(rawX, s.touchXMin, s.touchXMax, 0, TFT_WIDTH - 1);
-  y = ::map(rawY, s.touchYMin, s.touchYMax, 0, TFT_HEIGHT - 1);
+  x = ::map(rawX, xMin, xMax, 0, TFT_WIDTH - 1);
+  y = ::map(rawY, yMin, yMax, 0, TFT_HEIGHT - 1);
 #else
-  x = ::map(rawX, s.touchXMin, s.touchXMax, 0, TFT_WIDTH - 1);
-  y = ::map(rawY, s.touchYMax, s.touchYMin, 0, TFT_HEIGHT - 1);
+  x = ::map(rawX, xMin, xMax, 0, TFT_WIDTH - 1);
+  y = ::map(rawY, yMax, yMin, 0, TFT_HEIGHT - 1);
 #endif
+
+  x = constrain(x, 0, TFT_WIDTH - 1);
+  y = constrain(y, 0, TFT_HEIGHT - 1);
 }
 
 bool readTouchXY(int& x, int& y) {
@@ -141,13 +135,18 @@ bool readTouchXY(int& x, int& y) {
     return false;
   }
   mapTouchToScreen(rawX, rawY, x, y);
+  static uint32_t lastDbg = 0;
+  if (millis() - lastDbg > 400) {
+    Serial.printf("[touch] raw (%d, %d) -> screen (%d, %d)\n", rawX, rawY, x, y);
+    lastDbg = millis();
+  }
   return true;
 }
 
 bool readTouchXYDismiss(int& x, int& y) {
   int16_t rawX = 0;
   int16_t rawY = 0;
-  if (!touchSampleOk(120, rawX, rawY)) {
+  if (!touchSampleOk(150, rawX, rawY)) {
     return false;
   }
   mapTouchToScreen(rawX, rawY, x, y);

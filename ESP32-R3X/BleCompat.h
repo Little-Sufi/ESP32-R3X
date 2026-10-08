@@ -1,4 +1,6 @@
-#pragma once
+#if __has_include(<esp32-hal-alloc-ble-mem.h>)
+#include <esp32-hal-alloc-ble-mem.h>
+#endif
 
 #include <NimBLEDevice.h>
 

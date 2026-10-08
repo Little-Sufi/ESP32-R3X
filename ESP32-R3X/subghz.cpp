@@ -5,6 +5,7 @@
 #include "config.h"
 #include "icon.h"
 #include "shared.h"
+#include "SerialAutomation.h"
 
 
 namespace {
@@ -445,6 +446,8 @@ namespace subjammer { void subjammerHandleNavButtons(); }
 namespace SavedProfile { void profileHandleNavButtons(); }
 namespace SubBrute { void bruteHandleNavButtons(); }
 
+static bool s_cc1101HwAvailable = false;
+
 namespace replayat {
 
 #define EEPROM_SIZE 1440
@@ -679,9 +682,11 @@ static uint32_t replayDecodeMinDwellMs() {
 
 static void tuneToIndex(uint16_t idx, bool persist = true) {
   currentFrequencyIndex = idx % freqCount();
-  ELECHOUSE_cc1101.setSidle();
-  ELECHOUSE_cc1101.setMHZ(subghz_frequency_list[currentFrequencyIndex] / 1000000.0);
-  ELECHOUSE_cc1101.SetRx();
+  if (s_cc1101HwAvailable) {
+    ELECHOUSE_cc1101.setSidle();
+    ELECHOUSE_cc1101.setMHZ(subghz_frequency_list[currentFrequencyIndex] / 1000000.0);
+    ELECHOUSE_cc1101.SetRx();
+  }
   if (persist) {
     EEPROM.put(ADDR_FREQ, currentFrequencyIndex);
     EEPROM.commit();
@@ -734,6 +739,9 @@ static void replayBeginAutoScan() {
 }
 
 static bool replayAutoScanReadyForDecode(uint32_t now) {
+  if (!s_cc1101HwAvailable) {
+    return false;
+  }
   if (lastHopMs == 0 || (now - lastHopMs) < replayDecodeMinDwellMs()) {
     return false;
   }
@@ -744,6 +752,9 @@ static bool replayAutoScanReadyForDecode(uint32_t now) {
 }
 
 static void replaySampleRssiForScan(uint32_t now) {
+  if (!s_cc1101HwAvailable) {
+    return;
+  }
   if (now < scanSettledAtMs) {
     return;
   }
@@ -920,7 +931,7 @@ void updateDisplay() {
     replayDrawStaticChrome();
 
     const uint8_t modeState = replayModeState();
-    const int16_t rssi = ELECHOUSE_cc1101.getRssi();
+    const int16_t rssi = s_cc1101HwAvailable ? ELECHOUSE_cc1101.getRssi() : -100;
     char freqBuf[16];
     char modeBuf[8];
     char bitBuf[8];
@@ -936,7 +947,11 @@ void updateDisplay() {
       snprintf(modeBuf, sizeof(modeBuf), "%s", modeState == 1 ? "AUTO" : "MAN ");
     }
     snprintf(bitBuf, sizeof(bitBuf), "%d", receivedBitLength);
-    snprintf(rssiBuf, sizeof(rssiBuf), "%d", rssi);
+    if (s_cc1101HwAvailable) {
+      snprintf(rssiBuf, sizeof(rssiBuf), "%d", rssi);
+    } else {
+      snprintf(rssiBuf, sizeof(rssiBuf), "N/A");
+    }
     snprintf(ptcBuf, sizeof(ptcBuf), "%d", receivedProtocol);
     snprintf(valBuf, sizeof(valBuf), "%lu", (unsigned long)receivedValue);
 
@@ -1007,7 +1022,9 @@ void sendSignal() {
     delay(100);
     pinMode(REPLAY_TX_PIN, OUTPUT);
     mySwitch.enableTransmit(REPLAY_TX_PIN);
-    ELECHOUSE_cc1101.SetTx();
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.SetTx();
+    }
 
     tft.fillRect(0, 40, 240, kReplayStatusLineY - 40, TFT_BLACK);
 
@@ -1027,9 +1044,11 @@ void sendSignal() {
     mySwitch.disableTransmit();
     pinMode(REPLAY_TX_PIN, INPUT);
     pinMode(REPLAY_RX_PIN, INPUT);
-    ELECHOUSE_cc1101.SetRx();
-    delay(50);
-    replayArmReceive();
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.SetRx();
+        delay(50);
+        replayArmReceive();
+    }
 
     delay(500);
     replayRestoreStatusPanel();
@@ -1047,8 +1066,9 @@ void do_sampling() {
   #define ALPHA 0.2
   float ewmaRSSI = -50;
 
-for (int i = 0; i < samplesSUB; i++) {
-    int rssi = ELECHOUSE_cc1101.getRssi();
+  for (int i = 0; i < samplesSUB; i++) {
+    if (feature_exit_requested || isSerialExitRequested()) break;
+    int rssi = s_cc1101HwAvailable ? ELECHOUSE_cc1101.getRssi() : (-100 + (rand() % 5));
     rssi += 100;
 
     ewmaRSSI = (ALPHA * rssi) + ((1 - ALPHA) * ewmaRSSI);
@@ -1056,9 +1076,14 @@ for (int i = 0; i < samplesSUB; i++) {
     vRealSUB[i] = ewmaRSSI * 2;
     vImagSUB[i] = 1;
 
-    while (micros() < micro_s + sampling_period);
-    micro_s += sampling_period;
-}
+    if (s_cc1101HwAvailable) {
+      while (micros() < micro_s + sampling_period);
+      micro_s += sampling_period;
+    }
+  }
+  if (!s_cc1101HwAvailable) {
+    delay(10);
+  }
 
   double mean = 0;
 
@@ -1402,25 +1427,28 @@ void ReplayAttackSetup() {
   subghzRedrawNavChrome();
 
   /* Bring radio up after UI/SPI activity so first entry RX matches re-entry. */
-  ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.setCCMode(0);
-  ELECHOUSE_cc1101.setModulation(2);
-  ELECHOUSE_cc1101.setRxBW(500.0);
+  s_cc1101HwAvailable = checkCC1101();
+  if (s_cc1101HwAvailable) {
+    ELECHOUSE_cc1101.Init();
+    ELECHOUSE_cc1101.setCCMode(0);
+    ELECHOUSE_cc1101.setModulation(2);
+    ELECHOUSE_cc1101.setRxBW(500.0);
 
-  pinMode(REPLAY_RX_PIN, INPUT);
-  pinMode(REPLAY_TX_PIN, INPUT);
+    pinMode(REPLAY_RX_PIN, INPUT);
+    pinMode(REPLAY_TX_PIN, INPUT);
 
-  tuneToIndex(currentFrequencyIndex, false);
-  mySwitch.setReceiveTolerance(replayFreqIsLowBand(currentFrequencyIndex) ? 50 : 40);
-  mySwitch.setRepeatTransmit(8);
+    tuneToIndex(currentFrequencyIndex, false);
+    mySwitch.setReceiveTolerance(replayFreqIsLowBand(currentFrequencyIndex) ? 50 : 40);
+    mySwitch.setRepeatTransmit(8);
 
-  delay(50);
-  replayArmReceive();
+    delay(50);
+    replayArmReceive();
+  }
 }
 
 void ReplayAttackLoop() {
 
-    if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    if (feature_active && (feature_exit_requested || featureExitButtonPressed() || isSerialExitRequested())) {
         replayDisarmReceive();
         feature_exit_requested = true;
         return;
@@ -2021,14 +2049,18 @@ void transmitProfile(int index) {
     if (!selectedValid) return;
     Profile profileToSend = selectedProfile;
 
-    ELECHOUSE_cc1101.setSidle();
-    ELECHOUSE_cc1101.setMHZ(profileToSend.frequency / 1000000.0);
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.setSidle();
+        ELECHOUSE_cc1101.setMHZ(profileToSend.frequency / 1000000.0);
+    }
 
     mySwitch.disableReceive();
     delay(100);
     pinMode(SUBGHZ_TX_PIN, OUTPUT);
     mySwitch.enableTransmit(SUBGHZ_TX_PIN);
-    ELECHOUSE_cc1101.SetTx();
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.SetTx();
+    }
 
     profileClearContentArea(TFT_BLACK);
     tft.setCursor(10, 30 + yshift);
@@ -2051,9 +2083,11 @@ void transmitProfile(int index) {
     mySwitch.disableTransmit();
     pinMode(SUBGHZ_TX_PIN, INPUT);
     pinMode(SUBGHZ_RX_PIN, INPUT);
-    ELECHOUSE_cc1101.SetRx();
-    delay(50);
-    mySwitch.enableReceive(SUBGHZ_RX_PIN);
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.SetRx();
+        delay(50);
+        mySwitch.enableReceive(SUBGHZ_RX_PIN);
+    }
 
     delay(500);
     profileRestoreChrome();
@@ -2246,15 +2280,18 @@ void saveSetup() {
     subghzRedrawNavChrome();
     uiDrawn = false;
 
-    ELECHOUSE_cc1101.Init();
-    ELECHOUSE_cc1101.setCCMode(0);
-    ELECHOUSE_cc1101.setModulation(2);
-    pinMode(SUBGHZ_RX_PIN, INPUT);
-    pinMode(SUBGHZ_TX_PIN, INPUT);
-    ELECHOUSE_cc1101.SetRx();
+    s_cc1101HwAvailable = checkCC1101();
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.Init();
+        ELECHOUSE_cc1101.setCCMode(0);
+        ELECHOUSE_cc1101.setModulation(2);
+        pinMode(SUBGHZ_RX_PIN, INPUT);
+        pinMode(SUBGHZ_TX_PIN, INPUT);
+        ELECHOUSE_cc1101.SetRx();
 
-    mySwitch.enableReceive(SUBGHZ_RX_PIN);
-    mySwitch.setRepeatTransmit(8);
+        mySwitch.enableReceive(SUBGHZ_RX_PIN);
+        mySwitch.setRepeatTransmit(8);
+    }
 
     refreshSdIndex(false);
     cacheDirty = true;
@@ -2267,7 +2304,7 @@ void saveSetup() {
 
 void saveLoop() {
 
-    if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    if (feature_active && (feature_exit_requested || featureExitButtonPressed() || isSerialExitRequested())) {
         feature_exit_requested = true;
         return;
     }
@@ -2752,14 +2789,17 @@ void subjammerSetup() {
     drawStatusBar(readBatteryVoltage(), true);
     subghzRedrawNavChrome();
 
-    ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+    s_cc1101HwAvailable = checkCC1101();
+    if (s_cc1101HwAvailable) {
+        ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
 
-    ELECHOUSE_cc1101.Init();
-    ELECHOUSE_cc1101.setModulation(0);
-    ELECHOUSE_cc1101.setRxBW(500.0);
-    ELECHOUSE_cc1101.setPA(12);
-    ELECHOUSE_cc1101.setMHZ(targetFrequency);
-    ELECHOUSE_cc1101.SetTx();
+        ELECHOUSE_cc1101.Init();
+        ELECHOUSE_cc1101.setModulation(0);
+        ELECHOUSE_cc1101.setRxBW(500.0);
+        ELECHOUSE_cc1101.setPA(12);
+        ELECHOUSE_cc1101.setMHZ(targetFrequency);
+        ELECHOUSE_cc1101.SetTx();
+    }
 
     randomSeed(analogRead(0));
 
@@ -2784,7 +2824,7 @@ void subjammerSetup() {
 
 void subjammerLoop() {
 
-    if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+    if (feature_active && (feature_exit_requested || featureExitButtonPressed() || isSerialExitRequested())) {
         feature_exit_requested = true;
         return;
     }
@@ -2801,17 +2841,10 @@ void subjammerLoop() {
     jammerPollBlinkIndicator();
     subjammerHandleNavButtons();
 
-#if HAS_PCF8574_BUTTONS
-    int btnLeftState = pcf.digitalRead(JAM_BTN_LEFT);
-    int btnRightState = pcf.digitalRead(JAM_BTN_RIGHT);
-    int btnUpState = pcf.digitalRead(JAM_BTN_UP);
-    int btnDownState = pcf.digitalRead(JAM_BTN_DOWN);
-#else
     int btnLeftState = isPhysicalButtonPressed(BTN_LEFT) ? LOW : HIGH;
     int btnRightState = isPhysicalButtonPressed(BTN_RIGHT) ? LOW : HIGH;
     int btnUpState = isPhysicalButtonPressed(BTN_UP) ? LOW : HIGH;
     int btnDownState = isPhysicalButtonPressed(BTN_DOWN) ? LOW : HIGH;
-#endif
 
     if (btnUpState == LOW && millis() - lastDebounceTime > debounceDelay) {
         subjammerToggleJam();
@@ -2832,25 +2865,29 @@ void subjammerLoop() {
     subjammerAutoSweepIfDue();
 
     if (jammingRunning) {
-        ELECHOUSE_cc1101.SetTx();
+        if (s_cc1101HwAvailable) {
+            ELECHOUSE_cc1101.SetTx();
 
-        if (continuousMode) {
-            ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, 0xFF);
-            ELECHOUSE_cc1101.SpiStrobe(CC1101_STX);
-            digitalWrite(TX_PIN, HIGH);
-        } else {
-            for (int i = 0; i < 10; i++) {
-                uint32_t noise = random(16777216);
-                ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, noise >> 16);
-                ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, (noise >> 8) & 0xFF);
-                ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, noise & 0xFF);
+            if (continuousMode) {
+                ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, 0xFF);
                 ELECHOUSE_cc1101.SpiStrobe(CC1101_STX);
-                delayMicroseconds(50);
-              }
-          }
-      }
-  }
+                digitalWrite(TX_PIN, HIGH);
+            } else {
+                for (int i = 0; i < 10; i++) {
+                    uint32_t noise = random(16777216);
+                    ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, noise >> 16);
+                    ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, (noise >> 8) & 0xFF);
+                    ELECHOUSE_cc1101.SpiWriteReg(CC1101_TXFIFO, noise & 0xFF);
+                    ELECHOUSE_cc1101.SpiStrobe(CC1101_STX);
+                    delayMicroseconds(50);
+                }
+            }
+        } else {
+            delay(15);
+        }
+    }
 }
+}  // namespace subjammer
 
 namespace SubBrute {
 
@@ -3606,16 +3643,19 @@ void subBruteSetup() {
   digitalWrite(CC1101_CS, HIGH);
 #endif
 
-  ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
-  ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
-  ELECHOUSE_cc1101.Init();
-  ELECHOUSE_cc1101.setCCMode(0);
-  ELECHOUSE_cc1101.setModulation(2);
-  ELECHOUSE_cc1101.setRxBW(500.0);
-  ELECHOUSE_cc1101.setPA(12);
-  ELECHOUSE_cc1101.setMHZ(bruteFreqMHz());
-  ELECHOUSE_cc1101.setSidle();
-  pinMode(BRUTE_TX_PIN, INPUT);
+  s_cc1101HwAvailable = checkCC1101();
+  if (s_cc1101HwAvailable) {
+    ELECHOUSE_cc1101.setSpiPin(CC1101_SCK, CC1101_MISO, CC1101_MOSI, CC1101_CS);
+    ELECHOUSE_cc1101.setGDO(CC1101_GDO0, CC1101_GDO2);
+    ELECHOUSE_cc1101.Init();
+    ELECHOUSE_cc1101.setCCMode(0);
+    ELECHOUSE_cc1101.setModulation(2);
+    ELECHOUSE_cc1101.setRxBW(500.0);
+    ELECHOUSE_cc1101.setPA(12);
+    ELECHOUSE_cc1101.setMHZ(bruteFreqMHz());
+    ELECHOUSE_cc1101.setSidle();
+    pinMode(BRUTE_TX_PIN, INPUT);
+  }
 
   s_freqIndex = 11;
   s_bitsIndex = 2;
@@ -3648,7 +3688,7 @@ void subBruteSetup() {
 }
 
 void subBruteLoop() {
-  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed() || isSerialExitRequested())) {
     feature_exit_requested = true;
     s_stopRequested = true;
     return;
@@ -3662,17 +3702,10 @@ void subBruteLoop() {
   }
   bruteHandleNavButtons();
 
-#if HAS_PCF8574_BUTTONS
-  const int btnLeftState = pcf.digitalRead(BTN_LEFT);
-  const int btnRightState = pcf.digitalRead(BTN_RIGHT);
-  const int btnUpState = pcf.digitalRead(BTN_UP);
-  const int btnDownState = pcf.digitalRead(BTN_DOWN);
-#else
   const int btnLeftState = isPhysicalButtonPressed(BTN_LEFT) ? LOW : HIGH;
   const int btnRightState = isPhysicalButtonPressed(BTN_RIGHT) ? LOW : HIGH;
   const int btnUpState = isPhysicalButtonPressed(BTN_UP) ? LOW : HIGH;
   const int btnDownState = isPhysicalButtonPressed(BTN_DOWN) ? LOW : HIGH;
-#endif
 
   if (btnLeftState == LOW && millis() - s_lastDebounce > kDebounceMs) {
     adjustFocused(-1);
@@ -4128,6 +4161,16 @@ static void jdDrawWaveform(bool jam, bool activity) {
 struct WindowStat { int peakDbm; int minDbm; float duty; uint32_t elapsedMs; };
 
 static WindowStat sampleWindow() {
+  if (!s_cc1101HwAvailable) {
+    WindowStat st;
+    st.peakDbm = -100;
+    st.minDbm = -100;
+    st.duty = 0.0f;
+    st.elapsedMs = 20;
+    delay(20);
+    return st;
+  }
+
   const int busyThresh = max(JD_ABS_THRESH_DBM, (int)(noiseFloor + JD_MARGIN_DB));
   int peak = -127, lo = 0;
   uint16_t busy = 0;
@@ -4212,7 +4255,9 @@ static void handleInput() {
 }
 
 static void exitCleanup() {
-  ELECHOUSE_cc1101.setSidle();
+  if (s_cc1101HwAvailable) {
+    ELECHOUSE_cc1101.setSidle();
+  }
   restoreSdAfterSharedSpi();
 }
 
@@ -4232,8 +4277,11 @@ void Setup() {
   digitalWrite(CC1101_CS, HIGH);
 #endif
 
-  cc1101BeginRx();
-  tuneTo(freqIdx);
+  s_cc1101HwAvailable = checkCC1101();
+  if (s_cc1101HwAvailable) {
+    cc1101BeginRx();
+    tuneTo(freqIdx);
+  }
 
   samplingPeriod = round(1000000.0 * (1.0 / JD_SAMPLE_HZ));
 
@@ -4264,7 +4312,7 @@ void Setup() {
 }
 
 void Loop() {
-  if (feature_active && (feature_exit_requested || featureExitButtonPressed())) {
+  if (feature_active && (feature_exit_requested || featureExitButtonPressed() || isSerialExitRequested())) {
     exitCleanup();
     feature_exit_requested = true;
     return;

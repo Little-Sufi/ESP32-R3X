@@ -106,6 +106,14 @@ namespace Scanner {
   void scannerLoop();
   void exit();
 }
+namespace NrfAnalyzer {
+  void setup();
+  void loop();
+}
+namespace NrfJammer {
+  void setup();
+  void loop();
+}
 namespace ProtoKill {
   void prokillSetup();
   void prokillLoop();

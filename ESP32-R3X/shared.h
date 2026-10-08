@@ -263,10 +263,14 @@ static const uint8_t OBF_WB[]   = {96, 124, 124, 120, 123, 50, 39, 39, 111, 97, 
 #define TOUCH_SHARES_TFT_SPI 0
 #endif
 
-#if defined(BOARD_CYD)
 #ifndef TOUCH_ROTATION
+#if defined(BOARD_CYD)
 /* Match TFT_ROTATION (RNT CYD test uses the same rotation for tft and touch). */
 #define TOUCH_ROTATION TFT_ROTATION
+#elif defined(BOARD_ESP32_DIV_V1)
+#define TOUCH_ROTATION 2
+#else
+#define TOUCH_ROTATION 0
 #endif
 #endif
 
@@ -421,14 +425,14 @@ static const uint8_t OBF_WB[]   = {96, 124, 124, 120, 123, 50, 39, 39, 111, 97, 
 #if defined(BOARD_CYD)
 #define PN532_MISO 19
 #else
-#define PN532_MISO 11
+#define PN532_MISO 13
 #endif
 #endif
 #ifndef PN532_MOSI
 #if defined(BOARD_CYD)
 #define PN532_MOSI 23
 #else
-#define PN532_MOSI 13
+#define PN532_MOSI 11
 #endif
 #endif
 #ifndef PN532_SS
@@ -723,8 +727,10 @@ static const uint8_t OBF_WB[]   = {96, 124, 124, 120, 123, 50, 39, 39, 111, 97, 
 #define BATTERY_ADC_PIN 36
 #elif defined(BOARD_CYD)
 #define BATTERY_ADC_PIN -1
+#elif defined(BOARD_ESP32_DIV_V2)
+#define BATTERY_ADC_PIN 2
 #else
-#define BATTERY_ADC_PIN -1
+#define BATTERY_ADC_PIN 2
 #endif
 #endif
 #ifndef BATTERY_VDIV_R1

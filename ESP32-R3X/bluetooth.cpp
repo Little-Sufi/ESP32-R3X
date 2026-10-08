@@ -40,30 +40,23 @@ static int bleContentBottom() {
   return featureHasTouchNavBar() ? touchNavContentBottomY() : kBleScreenH;
 }
 
-bool ensureBleStackReady() {
-  static bool ready = false;
-  if (ready) {
-    return true;
-  }
-  const uint32_t heap = ESP.getFreeHeap();
-  Serial.printf("[ble] init begin, free heap=%u\n", (unsigned)heap);
-#if !BOARD_HAS_ESP32S3
-  // Classic ESP32 NimBLE typically needs ~40KB+ free; abort soft instead of OOM reboot.
-  if (heap < 40000u) {
-    Serial.println("[ble] skip init — low heap");
-    return false;
-  }
-#endif
-  // Classic BT controller RAM is unused by NimBLE; reclaim it before stack init.
-  // On ESP32 this often frees ~30KB and avoids boot OOM/reboot after the intro.
-  esp_err_t rel = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-  if (rel != ESP_OK && rel != ESP_ERR_INVALID_STATE) {
-    Serial.printf("[ble] classic mem_release: %s\n", esp_err_to_name(rel));
-  }
-  BLEDevice::init(ESP32DIV_NAME);
-  ready = true;
-  Serial.printf("[ble] init done, free heap=%u\n", (unsigned)ESP.getFreeHeap());
+extern "C" bool bleInUse(void) {
   return true;
+}
+
+extern "C" bool btInUse(void) {
+  return true;
+}
+
+void bleGlobalInit() {
+  if (!BLEDevice::getInitialized()) {
+    BLEDevice::init(ESP32DIV_NAME);
+  }
+}
+
+bool ensureBleStackReady() {
+  bleGlobalInit();
+  return BLEDevice::getInitialized();
 }
 
 static bool bleRequireStackOrExit() {
@@ -4993,6 +4986,216 @@ void exit() {
 }
 
 }  // namespace Scanner
+
+namespace NrfAnalyzer {
+    bool is_scanning = false;
+    const int num_channels = 125;
+    uint8_t channel_values[125];
+    uint8_t highest_channel = 0;
+    uint8_t highest_value = 0;
+
+    void drawAnalyzerUI() {
+        tft.fillScreen(TFT_BLACK);
+        GadgetUI::drawTacticalHeader("NRF_ANALYZER_v2.0");
+        GadgetUI::drawGlowWindow(10, 45, 220, 150, "SPECTRUM_DATA");
+        
+        GadgetUI::drawTerminalBox(10, 205, 220, 60);
+        tft.setTextColor(CYBER_CYAN, 0x0000);
+        tft.setTextFont(1);
+        tft.setTextSize(1);
+        tft.setCursor(20, 215);
+        tft.print("SCAN CHANNELS: 1-125");
+        tft.setCursor(20, 230);
+        tft.print("STATUS: ");
+        tft.setTextColor(is_scanning ? CYBER_ORANGE : CYBER_CYAN, 0x0000);
+        tft.print(is_scanning ? "SWEEPING..." : "STANDBY");
+        
+        GadgetUI::drawTacticalFooter("MODE", is_scanning ? "STOP" : "SCAN", "BACK");
+    }
+
+    void updateStats() {
+        tft.fillRect(100, 215, 120, 40, 0x0000);
+        tft.setTextColor(TFTWHITE, 0x0000);
+        tft.setCursor(100, 215);
+        tft.printf("PEAK CH: %d", highest_channel);
+        tft.setCursor(100, 230);
+        tft.printf("STRENGTH: %d", highest_value);
+    }
+
+    void setup() {
+        pinMode(NRF24_SCAN_CE, OUTPUT);
+        pinMode(NRF24_SCAN_CSN, OUTPUT);
+        Scanner::disable();
+        Scanner::powerUp();
+        
+        memset(channel_values, 0, sizeof(channel_values));
+        is_scanning = false;
+        highest_channel = 0;
+        highest_value = 0;
+        drawAnalyzerUI();
+    }
+
+    void loop() {
+        if (checkGlobalBackTouch() || (isButtonPressed(BTN_SELECT) && !is_scanning)) {
+            feature_exit_requested = true;
+            is_scanning = false;
+            Scanner::disable();
+            Scanner::powerDown();
+            restoreSdAfterSharedSpi();
+            return;
+        }
+
+        int tx, ty;
+        if (readTouchXY(tx, ty)) {
+            if (GadgetUI::checkExitTouch(tx, ty) || tx < 50) {
+                feature_exit_requested = true;
+                is_scanning = false;
+                Scanner::disable();
+                Scanner::powerDown();
+                restoreSdAfterSharedSpi();
+                return;
+            }
+            if (ty > 270) {
+                is_scanning = !is_scanning;
+                drawAnalyzerUI();
+                delay(200);
+            }
+        }
+
+        if (isButtonPressed(BTN_UP) || isButtonPressed(BTN_RIGHT)) {
+            is_scanning = !is_scanning;
+            drawAnalyzerUI();
+            delay(200);
+        }
+        
+        if (is_scanning) {
+            uint8_t local_max = 0;
+            highest_channel = 0;
+            
+            for (int i = 0; i < num_channels; i++) {
+                Scanner::setRegister(_NRF24_RF_CH, (uint8_t)i);
+                Scanner::enable();
+                delayMicroseconds(130);
+                Scanner::disable();
+                
+                if (channel_values[i] > 0) channel_values[i]--;
+                
+                if (Scanner::carrierDetected()) {
+                    channel_values[i] += 8;
+                    if (channel_values[i] > 140) channel_values[i] = 140;
+                }
+                
+                if (channel_values[i] > local_max) {
+                    local_max = channel_values[i];
+                    highest_channel = i;
+                }
+                
+                int x = 12 + (i * 216 / 125);
+                int h = channel_values[i];
+                uint16_t color = CYBER_GREEN;
+                if (h > 50) color = CYBER_ORANGE;
+                if (h > 100) color = CYBER_RED;
+                
+                tft.drawLine(x, 193, x, 53, CYBER_NAVY);
+                if (h > 0) {
+                    tft.drawLine(x, 193, x, 193 - h, color);
+                }
+            }
+            highest_value = local_max;
+            updateStats();
+            yield();
+        }
+    }
+}
+
+namespace NrfJammer {
+    bool is_jamming = false;
+    int target_channel = 6;
+    float pulse_radius = 10;
+
+    void drawJammerUI() {
+        tft.fillScreen(TFT_BLACK);
+        GadgetUI::drawTacticalHeader("NRF_WLAN_JAMMER");
+        GadgetUI::drawGlowWindow(20, 60, 200, 160, is_jamming ? "INTERFERENCE_ACTIVE" : "TARGET_SELECTION");
+        
+        tft.setTextFont(1);
+        tft.setTextSize(1);
+        tft.setCursor(40, 100);
+        tft.setTextColor(TFTWHITE, 0x0000);
+        tft.print("SIGNAL STATE: ");
+        tft.setTextColor(is_jamming ? CYBER_RED : CYBER_CYAN, 0x0000);
+        tft.print(is_jamming ? "TX_ACTIVE" : "IDLE");
+
+        tft.setTextSize(3);
+        tft.setTextColor(CYBER_CYAN, 0x0000);
+        tft.setCursor(70, 140);
+        tft.print("CH:"); tft.print(target_channel);
+
+        GadgetUI::drawTacticalFooter("-CH", is_jamming ? "STOP" : "JAM!", "+CH");
+    }
+
+    void drawRadarPulse() {
+        if (!is_jamming) return;
+        tft.drawCircle(120, 155, pulse_radius, CYBER_RED);
+        tft.drawCircle(120, 155, pulse_radius - 2, 0x0000);
+        pulse_radius += 4;
+        if (pulse_radius > 60) pulse_radius = 10;
+    }
+
+    void setup() {
+        pinMode(NRF24_SCAN_CE, OUTPUT);
+        pinMode(NRF24_SCAN_CSN, OUTPUT);
+        Scanner::disable();
+        Scanner::powerUp();
+        
+        Scanner::setRegister(_NRF24_CONFIG, 0x02);
+        Scanner::setRegister(_NRF24_EN_AA, 0x00);
+        Scanner::setRegister(_NRF24_RF_SETUP, 0x0F);
+        
+        is_jamming = false;
+        drawJammerUI();
+    }
+    
+    void loop() {
+        if (checkGlobalBackTouch() || (isButtonPressed(BTN_SELECT) && !is_jamming)) {
+            feature_exit_requested = true;
+            is_jamming = false;
+            Scanner::disable();
+            Scanner::powerDown();
+            restoreSdAfterSharedSpi();
+            return;
+        }
+
+        int tx, ty;
+        if (readTouchXY(tx, ty)) {
+            if (GadgetUI::checkExitTouch(tx, ty) || tx < 50) {
+                feature_exit_requested = true;
+                is_jamming = false;
+                Scanner::disable();
+                Scanner::powerDown();
+                restoreSdAfterSharedSpi();
+                return;
+            }
+            if (ty > 270) {
+                if (tx < 80) { if (target_channel > 0) target_channel--; drawJammerUI(); delay(150); }
+                else if (tx > 160) { if (target_channel < 125) target_channel++; drawJammerUI(); delay(150); }
+                else { is_jamming = !is_jamming; pulse_radius = 10; drawJammerUI(); delay(200); }
+            }
+        }
+
+        if (isButtonPressed(BTN_LEFT)) { if (target_channel > 0) target_channel--; drawJammerUI(); delay(150); }
+        if (isButtonPressed(BTN_RIGHT)) { if (target_channel < 125) target_channel++; drawJammerUI(); delay(150); }
+        if (isButtonPressed(BTN_UP)) { is_jamming = !is_jamming; pulse_radius = 10; drawJammerUI(); delay(200); }
+        
+        if (is_jamming) {
+            Scanner::setRegister(_NRF24_RF_CH, (uint8_t)target_channel);
+            Scanner::enable();
+            drawRadarPulse();
+            delay(1);
+            yield();
+        }
+    }
+}
 
 namespace ProtoKill {
 

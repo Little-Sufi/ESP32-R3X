@@ -11,3 +11,9 @@ build/
 Thumbs.db
 ehthumbs.db
 [Dd]esktop.ini
+
+# Local tooling & caches
+arduino-cli.exe
+arduino-cli.zip
+__pycache__/
+*.pyc

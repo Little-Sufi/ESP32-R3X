@@ -47,6 +47,11 @@ bool ensureBleStackReady();
 /** Allow another SD mount attempt (clears v1 boot "gave up" latch). */
 void sdRetryMount();
 
+bool checkCC1101();
+bool checkNRF24(int slot = 1);
+bool checkSD();
+inline bool checkGlobalBackTouch() { return false; }
+
 extern bool feature_exit_requested;
 
 extern void setBrightness(uint8_t value);
@@ -104,6 +109,7 @@ void initSDCard();
 
 namespace AppSettingsUI{ void setup(); void loop(); }
 namespace TouchCalib{ void setup(); void loop(); }
+namespace GpioDashboard{ void setup(); void loop(); }
 
 namespace Terminal {
   void terminalSetup();
@@ -176,6 +182,7 @@ namespace GadgetUI {
   void drawGlowWindow(int16_t x, int16_t y, int16_t w, int16_t h, const char* title);
   void drawTerminalBox(int16_t x, int16_t y, int16_t w, int16_t h);
   void drawDiagnosticLine(const char* label, bool ok, int y);
+  void drawDiagnosticLine(const char* label, const char* pins, bool ok, int y);
   bool checkExitTouch(int16_t x, int16_t y);
 }
 
@@ -186,6 +193,7 @@ namespace System {
     bool cc1101;
     bool wifi;
     bool ble;
+    bool pn532;
   };
   
   HealthReport performHealthCheck();
