@@ -10,12 +10,13 @@
 
 | Peripheral | Signal | ESP32-S3 GPIO | Interface | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **ST7789 / ILI9341 Display** | MOSI | GPIO 11 | SPI (Shared) | Fast hardware SPI |
-| | SCLK | GPIO 12 | SPI (Shared) | 40-80MHz SPI Clock |
-| | CS | GPIO 10 | GPIO Out | Active LOW |
-| | DC | GPIO 9 | GPIO Out | Command/Data Select |
-| | RST | GPIO 46 | GPIO Out | Hardware Reset |
-| | BL (Backlight) | GPIO 7 | PWM LEDC | 5kHz, 8-bit brightness |
+| **ILI9341 TFT Display** | MOSI (SDI/DIN) | GPIO 35 | SPI Master Out | Hardware HSPI / SPI3 |
+| | SCLK (CLK) | GPIO 36 | SPI Clock | Fast hardware SPI Clock |
+| | MISO (SDO) | GPIO 37 | SPI Master In | Hardware HSPI / SPI3 |
+| | CS | GPIO 17 | GPIO Out | Active LOW Chip Select |
+| | DC (RS) | GPIO 16 | GPIO Out | Data / Command Select |
+| | RST | EN / RESET (-1)| Hardware Reset | Connects to ESP32 EN/RESET pin |
+| | BL (Backlight) | GPIO 7 | PWM LEDC | Transistor switch (SI2302/8050) |
 | **XPT2046 Touch Controller** | CS | GPIO 18 | SPI (Touch) | Dedicated SPI bus |
 | | MOSI | GPIO 35 | SPI (Touch) | Dedicated Data In |
 | | MISO | GPIO 37 | SPI (Touch) | Dedicated Data Out |

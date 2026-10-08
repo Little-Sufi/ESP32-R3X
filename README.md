@@ -86,12 +86,13 @@ The table below details the hardware pin configuration for the ESP32-R3X hardwar
 
 | Subsystem | Signal Name | ESP32-S3 GPIO | Description / Notes |
 | :--- | :--- | :--- | :--- |
-| **Display (ST7789 / ILI9341)** | TFT_MOSI | **GPIO 11** | Shared SPI Master Data Out |
-| | TFT_SCLK | **GPIO 12** | Shared SPI Clock |
-| | TFT_CS | **GPIO 10** | Display Chip Select |
-| | TFT_DC | **GPIO 9** | Data / Command Control |
-| | TFT_RST | **GPIO 46** | Hardware Reset |
-| | TFT_BL | **GPIO 7** | Backlight PWM (5 kHz, 8-bit) |
+| **Display (ILI9341)** | TFT_MOSI | **GPIO 35** | SPI Data Input (SDI / DIN) |
+| | TFT_SCLK | **GPIO 36** | SPI Clock (SCK / CLK) |
+| | TFT_MISO | **GPIO 37** | SPI Data Output (SDO) |
+| | TFT_CS | **GPIO 17** | Display Chip Select |
+| | TFT_DC | **GPIO 16** | Data / Command (DC / RS) |
+| | TFT_RST | **EN / RESET** | Display Reset (Hardwired to EN) |
+| | TFT_BL | **GPIO 7** | Backlight Control (SI2302 / 8050) |
 | **Touch Controller (XPT2046)** | T_CS | **GPIO 18** | Dedicated Touch Chip Select |
 | | T_MOSI | **GPIO 35** | Dedicated Touch MOSI |
 | | T_MISO | **GPIO 37** | Dedicated Touch MISO |
