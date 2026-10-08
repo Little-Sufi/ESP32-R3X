@@ -13,6 +13,10 @@
 #include "shared.h"
 #include "utils.h"
 #include "SerialAutomation.h"
+#include <RF24.h>
+#include <Wire.h>
+#include <HardwareSerial.h>
+#include "rfid.h"
 
 
 bool notificationVisible = false;
@@ -1449,65 +1453,146 @@ bool checkCC1101() {
 }
 
 bool checkNRF24(int slot) {
-#if defined(CSN_PIN_1)
-  return true;
-#elif defined(NRF24_SCAN_CSN)
-  return true;
-#else
-  return false;
+  reclaimSharedSpiBus();
+  int ce = -1;
+  int csn = -1;
+  if (slot == 1) {
+#if defined(CE_PIN_1) && defined(CSN_PIN_1)
+    ce = CE_PIN_1; csn = CSN_PIN_1;
 #endif
+  } else if (slot == 2) {
+#if defined(CE_PIN_2) && defined(CSN_PIN_2)
+    ce = CE_PIN_2; csn = CSN_PIN_2;
+#endif
+  } else if (slot == 3) {
+#if defined(CE_PIN_3) && defined(CSN_PIN_3)
+    ce = CE_PIN_3; csn = CSN_PIN_3;
+#endif
+  }
+  if (ce < 0 || csn < 0) {
+    restoreSdAfterSharedSpi();
+    return false;
+  }
+
+  RF24 radio(ce, csn, 4000000);
+  bool connected = false;
+  if (radio.begin()) {
+    if (radio.isChipConnected()) {
+      uint8_t origCh = radio.getChannel();
+      radio.setChannel(0x3C);
+      uint8_t ch1 = radio.getChannel();
+      radio.setChannel(0x5A);
+      uint8_t ch2 = radio.getChannel();
+      radio.setChannel(origCh);
+      if (ch1 == 0x3C && ch2 == 0x5A) {
+        connected = true;
+      }
+    }
+    radio.powerDown();
+  }
+  restoreSdAfterSharedSpi();
+  return connected;
 }
 
 bool checkSD() {
   return isSDCardAvailable();
 }
 
+bool checkPN532() {
+#if defined(PN532_SS)
+  reclaimSharedSpiBus();
+  bool ok = RfidNfc::begin();
+  restoreSdAfterSharedSpi();
+  return ok;
+#else
+  return false;
+#endif
+}
+
+bool checkGPS() {
+#if defined(GPS_UART_RX) && defined(GPS_UART_TX)
+  HardwareSerial gpsTest(GPS_UART_NUM);
+  gpsTest.begin(GPS_UART_BAUD, SERIAL_8N1, GPS_UART_RX, GPS_UART_TX);
+  while (gpsTest.available()) gpsTest.read();
+  
+  uint32_t startMs = millis();
+  bool received = false;
+  while (millis() - startMs < 500) {
+    if (gpsTest.available()) {
+      char c = (char)gpsTest.read();
+      if (c == '$' || (c >= 'A' && c <= 'Z')) {
+        received = true;
+        break;
+      }
+    }
+    delay(10);
+  }
+  gpsTest.end();
+  return received;
+#else
+  return false;
+#endif
+}
+
+bool checkIR() {
+#if defined(IR_RX_PIN)
+  // An active TSOP4838 / VS1838 receiver output is pulled HIGH internally when idle.
+  // With internal pulldown, an unconnected pin floats LOW.
+  pinMode(IR_RX_PIN, INPUT_PULLDOWN);
+  delayMicroseconds(100);
+  int v = digitalRead(IR_RX_PIN);
+  pinMode(IR_RX_PIN, INPUT);
+  return (v == HIGH);
+#else
+  return false;
+#endif
+}
+
+bool checkI2C() {
+  Wire.beginTransmission(0x20);
+  if (Wire.endTransmission() == 0) return true;
+  Wire.beginTransmission(0x38);
+  if (Wire.endTransmission() == 0) return true;
+  for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+    Wire.beginTransmission(addr);
+    if (Wire.endTransmission() == 0) return true;
+  }
+  return false;
+}
+
 namespace System {
   HealthReport performHealthCheck() {
-    HealthReport report = {false, false, false, false, false, false};
-    
-    // SD Card status
-    report.sd = s_sdFsMounted;
-
-    // NRF24 probe if pin configured
-    #if defined(CSN_PIN_1) && defined(CE_PIN_1)
-    report.nrf = true;
-    #endif
-
-    // CC1101 probe
-    #if defined(CC1101_CS)
-    report.cc1101 = true;
-    #endif
-
-    // PN532 probe
-    #if defined(PN532_SS)
-    report.pn532 = true;
-    #endif
-
-    // WiFi Stack
+    HealthReport report;
+    report.sd = checkSD();
+    report.nrf = checkNRF24(1);
+    report.cc1101 = checkCC1101();
+    report.pn532 = checkPN532();
+    report.gps = checkGPS();
+    report.ir = checkIR();
+    report.i2c = checkI2C();
     report.wifi = true;
-
-    // BLE Stack
     report.ble = true;
-
     return report;
   }
 
   void showDiagnosticScreen(const HealthReport& report) {
     tft.fillScreen(BLACK);
     GadgetUI::drawTacticalHeader("SYSTEM INITIALIZATION");
-    GadgetUI::drawTerminalBox(5, 45, 230, 230);
+    GadgetUI::drawTerminalBox(5, 45, 230, 260);
     
-    int y = 60;
-    GadgetUI::drawDiagnosticLine("SD      ", " CS:10 SCK:12", report.sd, y); y += 25;
-    GadgetUI::drawDiagnosticLine("NRF24   ", " CSN:5 CE:4", report.nrf, y); y += 25;
-    GadgetUI::drawDiagnosticLine("CC1101  ", " CS:34", report.cc1101, y); y += 25;
-    GadgetUI::drawDiagnosticLine("PN532   ", " CS:14", report.pn532, y); y += 25;
-    GadgetUI::drawDiagnosticLine("WIFI    ", " INTERNAL", report.wifi, y); y += 25;
-    GadgetUI::drawDiagnosticLine("B.T.    ", " INTERNAL", report.ble, y); y += 25;
+    int y = 55; int lh = 22;
+    GadgetUI::drawDiagnosticLine("SD      ", " CS:10 SCK:12", report.sd, y); y += lh;
+    GadgetUI::drawDiagnosticLine("NRF24   ", " CSN:4 CE:15", report.nrf, y); y += lh;
+    GadgetUI::drawDiagnosticLine("CC1101  ", " CS:5 SCK:12", report.cc1101, y); y += lh;
+    GadgetUI::drawDiagnosticLine("PN532   ", " CS:5 SCK:12", report.pn532, y); y += lh;
+    GadgetUI::drawDiagnosticLine("GPS     ", " RX:5 TX:6", report.gps, y); y += lh;
+    GadgetUI::drawDiagnosticLine("IR RX   ", " PIN:21", report.ir, y); y += lh;
+    GadgetUI::drawDiagnosticLine("I2C BUS ", " SDA:1 SCL:2", report.i2c, y); y += lh;
+    GadgetUI::drawDiagnosticLine("WIFI    ", " INTERNAL", report.wifi, y); y += lh;
+    GadgetUI::drawDiagnosticLine("B.T.    ", " INTERNAL", report.ble, y); y += lh;
     
-    tft.setTextColor(TFTWHITE, BLACK);
-    tft.setCursor(20, 250);
+    tft.setTextColor(CYBER_ORANGE, BLACK);
+    tft.setCursor(15, 265);
     tft.print("> SYSTEM READY...");
     
     delay(2000); 
@@ -3429,27 +3514,29 @@ namespace GpioDashboard {
     
     const char* pins[] = {
       "=== SPI Bus (SPI2) ===",
-      "SCK: 12", "MISO: 13", "MOSI: 11",
+      "SCK: 12, MISO: 13, MOSI: 11",
       "",
-      "=== Modules ===",
+      "=== Modules (CiferTech) ===",
       "SD Card CS: 10",
-      "NRF24 CE: 4, CSN: 5",
-      "CC1101 CS: 34", "CC1101 GDO0: 21", "CC1101 GDO2: 26",
-      "PN532 SS: 14",
+      "NRF24 #1 CE: 15, CSN: 4",
+      "NRF24 #2 CE: 47, CSN: 48",
+      "NRF24 #3 CE: 14, CSN: 21",
+      "CC1101 CS: 5, G0: 6, G2: 3",
+      "PN532 RFID/NFC SS: 5",
       "",
-      "=== TFT & Touch (SPI3) ===",
+      "=== TFT & Touch (HSPI3) ===",
       "TFT MOSI: 35, SCK: 36, MISO: 37",
       "TFT CS: 17, DC: 16, BL: 7",
       "TOUCH CS: 18",
       "",
       "=== IR & GPS ===",
-      "IR RX: 43, TX: 44",
-      "GPS RX: 1, TX: 2",
+      "IR TX: 14, RX: 21 (38kHz)",
+      "GPS RX: 5, TX: 6 (UART2)",
       "",
       "=== Hardware I2C ===",
-      "SDA: 8, SCL: 9"
+      "SDA: 1, SCL: 2 (PCF8574)"
     };
-    int numPins = 24;
+    int numPins = 22;
     
     tft.setTextFont(2);
     tft.setTextColor(UI_TEXT, UI_BG);

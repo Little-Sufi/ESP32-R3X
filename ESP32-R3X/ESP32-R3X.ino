@@ -2979,55 +2979,387 @@ static void runToolsFeatureExitCleanup() {
     }
 }
 
-void handleHardwareDiagnostics() {
-  feature_active = true;
-  feature_exit_requested = false;
-  tft.fillScreen(TFT_BLACK);
+static const char* const kPinsCC1101[] = {
+  "CS   : GPIO 5  (SPI Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "GDO0 : GPIO 6  (Packet Interrupt)",
+  "GDO2 : GPIO 3  (Carrier Sense)",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsNRF1[] = {
+  "CE   : GPIO 15 (Chip Enable)",
+  "CSN  : GPIO 4  (SPI Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "Slot : Hub Socket 1",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsNRF2[] = {
+  "CE   : GPIO 47 (Chip Enable)",
+  "CSN  : GPIO 48 (SPI Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "Slot : Hub Socket 2",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsNRF3[] = {
+  "CE   : GPIO 14 (Chip Enable)",
+  "CSN  : GPIO 21 (SPI Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "Slot : Hub Socket 3",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsSD[] = {
+  "CS   : GPIO 10 (SD Chip Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "Bus  : Shared SPI2 (VSPI)",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsPN532[] = {
+  "SS   : GPIO 5  (Slave Select)",
+  "SCK  : GPIO 12 (SPI Clock)",
+  "MOSI : GPIO 11 (SPI Master Out)",
+  "MISO : GPIO 13 (SPI Master In)",
+  "Mode : Shared SPI Bus",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsGPS[] = {
+  "RX   : GPIO 5  (ESP RX <- GPS TX)",
+  "TX   : GPIO 6  (ESP TX -> GPS RX)",
+  "UART : Hardware UART2",
+  "Baud : 9600 8-N-1",
+  "NMEA : GPRMC, GPGGA, GSA",
+  "VCC  : 3.3V / 5V Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsIR[] = {
+  "TX   : GPIO 14 (IR LED Driver)",
+  "RX   : GPIO 21 (VS1838/TSOP Signal)",
+  "Carrier : 38 kHz PWM",
+  "Type : Infrared Transceiver",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsI2C[] = {
+  "SDA  : GPIO 1  (I2C Data)",
+  "SCL  : GPIO 2  (I2C Clock)",
+  "Addr : 0x20..0x27 / 0x38..0x3F",
+  "Role : PCF8574 Button Matrix",
+  "VCC  : 3.3V DC Rail",
+  "GND  : System Ground"
+};
+
+static const char* const kPinsTFT[] = {
+  "CS   : GPIO 17 (TFT Chip Select)",
+  "DC   : GPIO 16 (Command/Data)",
+  "SCK  : GPIO 36 (HSPI3 Clock)",
+  "MOSI : GPIO 35 (HSPI3 MOSI)",
+  "MISO : GPIO 37 (HSPI3 MISO)",
+  "BL   : GPIO 7  (Backlight PWM)",
+  "RST  : EN / Reset"
+};
+
+static const char* const kPinsTouch[] = {
+  "CS   : GPIO 18 (Touch Chip Select)",
+  "CLK  : GPIO 36 (HSPI3 Clock)",
+  "MOSI : GPIO 35 (HSPI3 MOSI)",
+  "MISO : GPIO 37 (HSPI3 MISO)",
+  "Type : XPT2046 Resistive Touch"
+};
+
+static const char* const kPinsWiFiBle[] = {
+  "Radio: Built-in 2.4GHz RF SoC",
+  "WiFi : 802.11 b/g/n (HT20/HT40)",
+  "BLE  : Bluetooth Low Energy 5.0",
+  "Ant  : Onboard PCB Antenna"
+};
+
+struct DiagModuleItem {
+  const char* name;
+  const char* bus;
+  const char* shortPins;
+  bool isConnected;
+  const char* const* detailLines;
+  int numDetailLines;
+  bool (*probeFn)();
+};
+
+static bool probeDummyTrue() { return true; }
+static bool probeNRF1() { return checkNRF24(1); }
+static bool probeNRF2() { return checkNRF24(2); }
+static bool probeNRF3() { return checkNRF24(3); }
+
+static DiagModuleItem s_diagModules[] = {
+  { "CC1101 SUB-GHZ",   "SPI2",  "CS:5 G0:6 G2:3",    false, kPinsCC1101,  8, checkCC1101 },
+  { "NRF24 HUB (SLOT1)", "SPI2",  "CE:15 CSN:4",       false, kPinsNRF1,    8, probeNRF1 },
+  { "NRF24 HUB (SLOT2)", "SPI2",  "CE:47 CSN:48",      false, kPinsNRF2,    8, probeNRF2 },
+  { "NRF24 HUB (SLOT3)", "SPI2",  "CE:14 CSN:21",      false, kPinsNRF3,    8, probeNRF3 },
+  { "SD STORAGE BUS",   "SPI2",  "CS:10 SCK:12",      false, kPinsSD,      7, checkSD },
+  { "PN532 RFID / NFC", "SPI2",  "SS:5 SCK:12",       false, kPinsPN532,   7, checkPN532 },
+  { "NEO-6M GPS",       "UART2", "RX:5 TX:6",         false, kPinsGPS,     7, checkGPS },
+  { "IR TRANSCEIVER",   "GPIO",  "TX:14 RX:21",       false, kPinsIR,      6, checkIR },
+  { "PCF8574 I2C EXP",  "I2C",   "SDA:1 SCL:2",       false, kPinsI2C,     6, checkI2C },
+  { "ILI9341 DISPLAY",  "HSPI3", "CS:17 DC:16",       true,  kPinsTFT,     7, probeDummyTrue },
+  { "XPT2046 TOUCH",    "HSPI3", "CS:18 SCK:36",      true,  kPinsTouch,   5, probeDummyTrue },
+  { "WIFI & BLE 5.0",   "SOC",   "INTERNAL RADIO",    true,  kPinsWiFiBle, 4, probeDummyTrue }
+};
+
+static const int kNumDiagModules = sizeof(s_diagModules) / sizeof(s_diagModules[0]);
+
+static void showModulePinDetail(int modIdx) {
+  if (modIdx < 0 || modIdx >= kNumDiagModules) return;
+  DiagModuleItem& m = s_diagModules[modIdx];
   
-  GadgetUI::drawTacticalHeader("HARDWARE_PROBE_v2.0");
-  GadgetUI::drawTerminalBox(10, 50, 220, 220);
-  
-  int y = 65; int lh = 24;
-  tft.setTextFont(1);
+  auto redrawDetail = [&m]() {
+    tft.fillScreen(TFT_BLACK);
+    GadgetUI::drawTacticalHeader("PINOUT & INSPECTION");
+    
+    // Module title
+    tft.fillRect(10, 42, 220, 24, 0x18E3);
+    tft.drawRect(10, 42, 220, 24, CYBER_CYAN);
+    tft.setTextFont(2);
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(TFT_WHITE, 0x18E3);
+    tft.drawString(m.name, 120, 54);
+    tft.setTextDatum(TL_DATUM);
 
-  bool ccOk = checkCC1101();
-  GadgetUI::drawDiagnosticLine("CC1101 SUB-GHZ ", ccOk, y); y += lh;
+    // Live status badge
+    tft.setTextFont(1);
+    tft.setCursor(14, 72);
+    if (m.isConnected) {
+      tft.fillRect(10, 70, 220, 20, 0x03E0);
+      tft.setTextColor(TFT_WHITE, 0x03E0);
+      tft.print("  STATUS: CONNECTED [ONLINE / OK]");
+    } else {
+      tft.fillRect(10, 70, 220, 20, 0x8800);
+      tft.setTextColor(TFT_WHITE, 0x8800);
+      tft.print("  STATUS: NOT DETECTED [DISCONNECTED]");
+    }
 
-  bool nrfOk = checkNRF24(1);
-  GadgetUI::drawDiagnosticLine("NRF24L01+ HUB  ", nrfOk, y); y += lh;
+    // Detail pins box
+    GadgetUI::drawTerminalBox(10, 96, 220, 175);
+    tft.setTextFont(1);
+    tft.setTextColor(CYBER_ORANGE, TFT_BLACK);
+    tft.setCursor(18, 104);
+    tft.printf("BUS: %s | SCHEMATIC PINOUT:", m.bus);
+    
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    int py = 120;
+    for (int p = 0; p < m.numDetailLines && p < 8; p++) {
+      tft.setCursor(18, py);
+      tft.print(m.detailLines[p]);
+      py += 17;
+    }
 
-  bool sdOk = checkSD();
-  GadgetUI::drawDiagnosticLine("SD_STORAGE_BUS ", sdOk, y); y += lh;
+    // Footer buttons: TEST NOW (middle), BACK (left/right)
+    GadgetUI::drawTacticalFooter("BACK", "TEST NOW", "BACK");
+  };
 
-  GadgetUI::drawDiagnosticLine("TFT_S3_DISPLAY ", true, y); y += lh;
+  redrawDetail();
 
-  GadgetUI::drawDiagnosticLine("XPT2046_TOUCH  ", true, y); y += lh;
-
-  GadgetUI::drawDiagnosticLine("IR_TRANSCEIVER ", true, y); y += lh;
-
-  tft.setTextColor(CYBER_ORANGE, TFT_BLACK);
-  tft.setCursor(20, 245);
-  tft.print("> SYSTEM READY...");
-
-  GadgetUI::drawTacticalFooter("EXIT", "RESCAN", "PINS");
-
-  while (!feature_exit_requested) {
+  bool detailExit = false;
+  while (!detailExit && !feature_exit_requested) {
     int tx, ty;
     if (readTouchXY(tx, ty)) {
-      if (GadgetUI::checkExitTouch(tx, ty) || tx < 80) {
-        feature_exit_requested = true;
-      } else if (tx > 80 && tx < 160) {
-        handleHardwareDiagnostics();
-        return;
+      if (ty > 280) {
+        if (tx >= 80 && tx <= 160) {
+          // TEST NOW
+          tft.fillRect(18, 250, 204, 16, TFT_BLACK);
+          tft.setTextFont(1);
+          tft.setTextColor(CYBER_CYAN, TFT_BLACK);
+          tft.setCursor(18, 252);
+          tft.print("> Probing hardware...");
+          m.isConnected = m.probeFn();
+          delay(150);
+          redrawDetail();
+        } else {
+          // BACK
+          detailExit = true;
+          delay(150);
+          break;
+        }
       }
     }
-    if (checkGlobalBackTouch() || isButtonPressed(BTN_SELECT)) {
-      feature_exit_requested = true;
-      delay(200);
+
+    if (isButtonPressed(BTN_SELECT)) {
+      tft.fillRect(18, 250, 204, 16, TFT_BLACK);
+      tft.setTextFont(1);
+      tft.setTextColor(CYBER_CYAN, TFT_BLACK);
+      tft.setCursor(18, 252);
+      tft.print("> Probing hardware...");
+      m.isConnected = m.probeFn();
+      delay(150);
+      redrawDetail();
+    }
+
+    if (isButtonPressed(BTN_LEFT) || isButtonPressed(BTN_RIGHT) || checkGlobalBackTouch()) {
+      detailExit = true;
+      delay(150);
       break;
     }
     delay(20);
   }
+}
+
+void handleHardwareDiagnostics() {
+  feature_active = true;
+  feature_exit_requested = false;
+
+  // Initial full probe of all modules
+  for (int i = 0; i < kNumDiagModules; i++) {
+    s_diagModules[i].isConnected = s_diagModules[i].probeFn();
+  }
+
+  int selIdx = 0;
+  int scrollOffset = 0;
+  const int kItemsPerPage = 6;
+  const int kRowHeight = 34;
+
+  auto drawOverview = [&]() {
+    tft.fillScreen(TFT_BLACK);
+    GadgetUI::drawTacticalHeader("HARDWARE INFO & PROBE");
+    GadgetUI::drawTerminalBox(6, 42, 228, 238);
+
+    tft.setTextFont(1);
+    for (int r = 0; r < kItemsPerPage; r++) {
+      int idx = scrollOffset + r;
+      if (idx >= kNumDiagModules) break;
+      int y = 50 + r * kRowHeight;
+      bool isSel = (idx == selIdx);
+
+      if (isSel) {
+        tft.fillRect(10, y - 2, 220, kRowHeight - 2, 0x18E3);
+      } else {
+        tft.fillRect(10, y - 2, 220, kRowHeight - 2, TFT_BLACK);
+      }
+
+      // Status indicator
+      tft.setCursor(12, y + 2);
+      tft.setTextColor(TFT_WHITE, isSel ? 0x18E3 : TFT_BLACK);
+      tft.print(isSel ? ">" : " ");
+      tft.print("[");
+      if (s_diagModules[idx].isConnected) {
+        tft.setTextColor(CYBER_CYAN, isSel ? 0x18E3 : TFT_BLACK);
+        tft.print("OK");
+      } else {
+        tft.setTextColor(CYBER_ORANGE, isSel ? 0x18E3 : TFT_BLACK);
+        tft.print("--");
+      }
+      tft.setTextColor(TFT_WHITE, isSel ? 0x18E3 : TFT_BLACK);
+      tft.print("] ");
+
+      // Module Name
+      tft.print(s_diagModules[idx].name);
+
+      // Pins on second sub-line
+      tft.setCursor(38, y + 16);
+      tft.setTextColor(isSel ? TFT_YELLOW : DARK_GRAY, isSel ? 0x18E3 : TFT_BLACK);
+      tft.print(s_diagModules[idx].shortPins);
+    }
+
+    // Scroll indicator
+    tft.setTextFont(1);
+    tft.setTextColor(CYBER_ORANGE, TFT_BLACK);
+    tft.setCursor(14, 266);
+    tft.printf("MOD %d/%d | UP/DN:NAV SEL:PINS", selIdx + 1, kNumDiagModules);
+
+    GadgetUI::drawTacticalFooter("EXIT", "RESCAN", "DETAIL");
+  };
+
+  drawOverview();
+
+  while (!feature_exit_requested) {
+    int tx, ty;
+    if (readTouchXY(tx, ty)) {
+      if (ty > 280) {
+        if (tx < 80) {
+          // EXIT
+          feature_exit_requested = true;
+          delay(150);
+          break;
+        } else if (tx >= 80 && tx <= 160) {
+          // RESCAN ALL
+          tft.fillRect(14, 264, 210, 14, TFT_BLACK);
+          tft.setTextColor(CYBER_CYAN, TFT_BLACK);
+          tft.setCursor(14, 266);
+          tft.print("Scanning all hardware buses...");
+          for (int i = 0; i < kNumDiagModules; i++) {
+            s_diagModules[i].isConnected = s_diagModules[i].probeFn();
+          }
+          delay(100);
+          drawOverview();
+          continue;
+        } else {
+          // DETAIL
+          showModulePinDetail(selIdx);
+          drawOverview();
+          continue;
+        }
+      } else if (ty >= 46 && ty <= 260) {
+        // Tapped a row directly
+        int tappedRow = (ty - 46) / kRowHeight;
+        int tappedIdx = scrollOffset + tappedRow;
+        if (tappedIdx >= 0 && tappedIdx < kNumDiagModules) {
+          selIdx = tappedIdx;
+          showModulePinDetail(selIdx);
+          drawOverview();
+          continue;
+        }
+      }
+    }
+
+    if (isButtonPressed(BTN_UP)) {
+      if (selIdx > 0) {
+        selIdx--;
+        if (selIdx < scrollOffset) scrollOffset = selIdx;
+        drawOverview();
+      }
+      delay(120);
+    } else if (isButtonPressed(BTN_DOWN)) {
+      if (selIdx < kNumDiagModules - 1) {
+        selIdx++;
+        if (selIdx >= scrollOffset + kItemsPerPage) {
+          scrollOffset = selIdx - kItemsPerPage + 1;
+        }
+        drawOverview();
+      }
+      delay(120);
+    } else if (isButtonPressed(BTN_SELECT)) {
+      showModulePinDetail(selIdx);
+      drawOverview();
+      delay(150);
+    }
+
+    if (checkGlobalBackTouch()) {
+      feature_exit_requested = true;
+      delay(150);
+      break;
+    }
+    delay(20);
+  }
+
   feature_active = false;
   feature_exit_requested = false;
   runToolsFeatureExitCleanup();

@@ -50,6 +50,10 @@ void sdRetryMount();
 bool checkCC1101();
 bool checkNRF24(int slot = 1);
 bool checkSD();
+bool checkPN532();
+bool checkGPS();
+bool checkIR();
+bool checkI2C();
 inline bool checkGlobalBackTouch() { return false; }
 
 extern bool feature_exit_requested;
@@ -191,9 +195,12 @@ namespace System {
     bool sd;
     bool nrf;
     bool cc1101;
+    bool pn532;
+    bool gps;
+    bool ir;
+    bool i2c;
     bool wifi;
     bool ble;
-    bool pn532;
   };
   
   HealthReport performHealthCheck();

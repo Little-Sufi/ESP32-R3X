@@ -482,6 +482,12 @@ static const uint8_t OBF_WB[]   = {96, 124, 124, 120, 123, 50, 39, 39, 111, 97, 
 #define GPS_UART_TX 6
 #endif
 #endif
+#ifndef GPS_UART_NUM
+#define GPS_UART_NUM 2
+#endif
+#ifndef GPS_UART_BAUD
+#define GPS_UART_BAUD 9600
+#endif
 
 /* CC1101 (Sub-GHz) */
 #ifndef CC1101_SCK

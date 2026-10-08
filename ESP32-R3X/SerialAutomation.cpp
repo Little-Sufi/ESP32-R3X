@@ -230,6 +230,30 @@ static bool testProbeBattery() {
   return (v > 2.5f);
 }
 
+static bool testProbePN532() {
+  bool ok = checkPN532();
+  Serial.printf("[TEST] PN532: %s (NFC/RFID SPI)\n", ok ? "PASS (Found)" : "FAIL (Not detected)");
+  return ok;
+}
+
+static bool testProbeGPS() {
+  bool ok = checkGPS();
+  Serial.printf("[TEST] GPS: %s (Neo-6M UART2 @ 9600)\n", ok ? "PASS (NMEA active)" : "FAIL (No data on RX5)");
+  return ok;
+}
+
+static bool testProbeIR() {
+  bool ok = checkIR();
+  Serial.printf("[TEST] IR: %s (TSOP/VS1838 Pin 21)\n", ok ? "PASS (Sensor idle high)" : "FAIL (No sensor / Low)");
+  return ok;
+}
+
+static bool testProbeI2C() {
+  bool ok = checkI2C();
+  Serial.printf("[TEST] I2C: %s (PCF8574 on SDA1/SCL2)\n", ok ? "PASS (ACK received)" : "FAIL (No I2C response)");
+  return ok;
+}
+
 void serialAutomationRunDiag() {
   Serial.println("================== HARDWARE PROBE & DIAGNOSTICS ==================");
   Serial.printf("[CHIP] ESP32-S3 rev %d, Cores: %d, CPU: %u MHz\n",
@@ -255,6 +279,10 @@ void serialAutomationRunDiag() {
   testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeNrf(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeCC1101(); vTaskDelay(pdMS_TO_TICKS(50));
+  testProbePN532(); vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeGPS(); vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeIR(); vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeI2C(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
   testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
@@ -272,6 +300,14 @@ void serialAutomationRunTest(const String& target) {
     testProbeNrf();
   } else if (t == "CC1101" || t == "SUBGHZ") {
     testProbeCC1101();
+  } else if (t == "PN532" || t == "NFC" || t == "RFID") {
+    testProbePN532();
+  } else if (t == "GPS") {
+    testProbeGPS();
+  } else if (t == "IR") {
+    testProbeIR();
+  } else if (t == "I2C") {
+    testProbeI2C();
   } else if (t == "WIFI") {
     testProbeWiFi();
   } else if (t == "BLE" || t == "BT") {
@@ -285,6 +321,10 @@ void serialAutomationRunTest(const String& target) {
     bool s_sd = testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_nrf = testProbeNrf(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_cc = testProbeCC1101(); vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_pn = testProbePN532(); vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_gps = testProbeGPS(); vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_ir = testProbeIR(); vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_i2c = testProbeI2C(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_wifi = testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_ble = testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
     bool s_bat = testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
@@ -292,6 +332,10 @@ void serialAutomationRunTest(const String& target) {
     Serial.printf("[RESULT] SD:      %s\n", s_sd ? "PASS" : "FAIL");
     Serial.printf("[RESULT] NRF24:   %s\n", s_nrf ? "PASS" : "FAIL");
     Serial.printf("[RESULT] CC1101:  %s\n", s_cc ? "PASS" : "FAIL");
+    Serial.printf("[RESULT] PN532:   %s\n", s_pn ? "PASS" : "FAIL");
+    Serial.printf("[RESULT] GPS:     %s\n", s_gps ? "PASS" : "FAIL");
+    Serial.printf("[RESULT] IR:      %s\n", s_ir ? "PASS" : "FAIL");
+    Serial.printf("[RESULT] I2C:     %s\n", s_i2c ? "PASS" : "FAIL");
     Serial.printf("[RESULT] WIFI:    %s\n", s_wifi ? "PASS" : "FAIL");
     Serial.printf("[RESULT] BLE:     %s\n", s_ble ? "PASS" : "FAIL");
     Serial.printf("[RESULT] BATTERY: %s\n", s_bat ? "PASS" : "FAIL");

@@ -48,7 +48,7 @@ byte SS_PIN_M[max_modul];
 byte GDO0_M[max_modul];
 byte GDO2_M[max_modul];
 byte gdo_set=0;
-bool spi = 0;
+static bool spi = 0;
 bool ccmode = 0;
 float MHz = 433.92;
 byte m4RxBw = 0;
@@ -661,12 +661,26 @@ clb4[1]=e;
 *OUTPUT       :none
 ****************************************************************/
 bool ELECHOUSE_CC1101::getCC1101(void){
-setSpi();
-if (SpiReadStatus(0x31)>0){
-return 1;
-}else{
-return 0;
-}
+  setSpi();
+  byte ver = SpiReadStatus(0x31);
+  byte part = SpiReadStatus(0x30);
+  // CC1101 PARTNUM register (0x30) is always 0x00.
+  // VERSION register (0x31) is typically 0x04 or 0x14 (valid 0x03..0x25).
+  // Disconnected/open SPI lines return 0xFF (floating high) or 0x00 (floating low).
+  if (ver == 0x00 || ver == 0xFF || part != 0x00 || ver < 0x03 || ver > 0x25) {
+    return 0;
+  }
+  // Robust bidirectional register read-write test on PKTLEN (0x06):
+  byte origPkt = SpiReadReg(0x06);
+  SpiWriteReg(0x06, 0x55);
+  byte t1 = SpiReadReg(0x06);
+  SpiWriteReg(0x06, 0xAA);
+  byte t2 = SpiReadReg(0x06);
+  SpiWriteReg(0x06, origPkt);
+  if (t1 == 0x55 && t2 == 0xAA) {
+    return 1;
+  }
+  return 0;
 }
 /****************************************************************
 *FUNCTION NAME:getMode
