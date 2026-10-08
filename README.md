@@ -29,11 +29,27 @@
 
 Detailed guides, tutorials, and pinouts are available in the **[ESP32-R3X Wiki](wiki/Home.md)**:
 
+* ⚡ **[Firmware Flashing Guide](docs/FLASHING_GUIDE.md)** — 8 methods to flash pre-compiled binaries, 1-command merged flasher, and Web flasher.
 * 🔌 **[Hardware & Schematics Guide](wiki/Hardware-and-Schematics.md)** — Comprehensive pin mapping for all modules. See also the **[Complete Visual Wiring Diagram & Schematics](Schematic/WIRING_DIAGRAM.md)**.
 * 🛠️ **[Installation & Configuration Guide](wiki/Installation-and-Configuration.md)** — Step-by-step setup in Arduino IDE 2.x and flashing precompiled binaries.
 * 📻 **[Sub-GHz RF Exploration Guide](wiki/SubGHz-RF-Guide.md)** — Detailed manual for CC1101 replay attacks, jamming, De Bruijn brute-force, and RSSI analysis.
 * 📡 **[Wi-Fi & Bluetooth Tools](wiki/WiFi-and-BLE-Tools.md)** — Full documentation of offensive and defensive 802.11 and BLE utilities.
 * ❓ **[Troubleshooting & FAQ](wiki/Troubleshooting-and-FAQ.md)** — Hardware bring-up, CC1101 timeout protection, and touch calibration fixes.
+
+---
+
+## 📸 Hardware Showcase & On-Device Interface
+
+<p align="center">
+  <img src="docs/hardware_photos/boot_logo.jpeg" width="31%" alt="ESP32-R3X Boot Splash">
+  <img src="docs/hardware_photos/main_launcher.jpeg" width="31%" alt="Tactical Cyber Launcher">
+  <img src="docs/hardware_photos/hardware_info_screen.jpeg" width="31%" alt="Hardware Subsystem Info">
+</p>
+
+<p align="center">
+  <img src="docs/hardware_photos/diag_page1.jpeg" width="48%" alt="Hardware Diagnostics Page 1">
+  <img src="docs/hardware_photos/diag_page2.jpeg" width="48%" alt="Hardware Diagnostics Page 2">
+</p>
 
 ---
 

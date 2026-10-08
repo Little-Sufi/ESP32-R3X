@@ -8,6 +8,7 @@ Welcome to the official documentation for **ESP32-R3X** — an advanced multi-ba
 
 | Section | Description |
 | :--- | :--- |
+| **[Firmware Flashing Guide](Flashing-Guide.md)** | Complete 8-method flashing guide (GUI flasher, 1-command merged binary, WebUSB, esptool, and SD card). |
 | **[Hardware & Schematics](Hardware-and-Schematics.md)** | Full pin mapping for ILI9341 display, XPT2046 touch, CC1101, NRF24L01+, PN532, NEO-6M GPS, IR, PCF8574, and MicroSD. |
 | **[Wiring & Schematics Manual](Wiring-and-Schematics.md)** | Complete visual ASCII schematic diagrams, passive component values, BOM, and RF decoupling guidelines. |
 | **[Installation & Configuration](Installation-and-Configuration.md)** | Step-by-step flashing guide for Arduino IDE 2.x, board configuration parameters, and binary flashing. |
