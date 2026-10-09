@@ -9,11 +9,9 @@ Complete schematic specification and pin mapping for the **ESP32-R3X V2** hardwa
 ## 📑 Schematic Files in this Directory
 
 * 🔌 **[`WIRING_DIAGRAM.md`](WIRING_DIAGRAM.md)**: **Complete Visual Wiring Diagram & Schematic Guide** (pin-by-pin schematics, all resistors, decoupling capacitors, and power distribution).
-* **[`v2/Main-Schematic.jpg`](v2/Main-Schematic.jpg)**: V2 ESP32-S3 Baseboard circuit schematic (MCU, Power, USB-OTG, Display, MicroSD, I2C, UART).
-* **[`v2/Shield-Schematic.jpg`](v2/Shield-Schematic.jpg)**: V2 RF & Peripherals Shield schematic (CC1101, NRF24 x3, PN532, IR, GPS).
+* **[`v2/Main-Schematic.jpg`](v2/Main-Schematic.jpg)**: ESP32-R3X ESP32-S3 Baseboard circuit schematic (MCU, Power, USB-OTG, Display, MicroSD, I2C, UART).
+* **[`v2/Shield-Schematic.jpg`](v2/Shield-Schematic.jpg)**: ESP32-R3X RF & Peripherals Shield schematic (CC1101, NRF24 x3, PN532, IR, GPS).
 * **[`v2/main-BOM.xls`](v2/main-BOM.xls)** & **[`v2/shield-BOM.xlsx`](v2/shield-BOM.xlsx)**: Complete Bill of Materials with SMD component values and part numbers.
-* **[`v1/`](v1/)**: Legacy ESP32-WROOM V1 schematics and BOMs.
-* **[`beta/`](beta/)**: Prototype development board layouts.
 
 ---
 
