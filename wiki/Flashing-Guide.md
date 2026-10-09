@@ -55,9 +55,9 @@ The fastest terminal method. Flashes the entire 4MB memory map (bootloader, part
 2. Open PowerShell or Command Prompt in the repository root.
 3. Run:
    ```bash
-   python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3-merged.bin"
+   python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-merged.bin"
    ```
-   *(Replace `COM9` with your actual device port).*
+   *(Or simply run `Pre-compiled Bin\flash_r3x.bat COM9` or `fast_upload.bat COM9`).*
 4. Once verification completes (`Hash of data verified`), the device will reset and boot into ESP32-R3X.
 
 ---
@@ -70,15 +70,15 @@ Recommended if you are developing and only wish to update the application partit
 Run:
 ```bash
 python -m esptool --chip esp32s3 -p COM9 -b 921600 --before default_reset --after hard_reset write_flash \
-  0x0000 "Pre-compiled Bin/bootloader.bin" \
-  0x8000 "Pre-compiled Bin/partitions.bin" \
-  0xe000 "Pre-compiled Bin/boot_app0.bin" \
-  0x10000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3.bin"
+  0x0000  "Pre-compiled Bin/bootloader.bin" \
+  0x8000  "Pre-compiled Bin/partitions.bin" \
+  0xe000  "Pre-compiled Bin/boot_app0.bin" \
+  0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
 ```
 
 To flash **only the application code** without touching the bootloader:
 ```bash
-python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x10000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3.bin"
+python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
 ```
 
 ---
@@ -94,7 +94,8 @@ Espressif's official Windows graphical flashing tool is bundled in `tools/flash_
    - **WorkMode**: `develop`
    - **LoadMode**: `USB` or `UART`
 3. Configure the file offsets:
-   - Check Box 1: Browse to `Pre-compiled Bin/ESP32-R3X-v2-v1.7.3-merged.bin` @ `0x0000`
+   - Check Box 1: Browse to `Pre-compiled Bin/ESP32-R3X-merged.bin` @ `0x0000`
+
 4. Set Hardware Parameters:
    - **SPI SPEED**: `80MHz`
    - **SPI MODE**: `QIO`

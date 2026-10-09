@@ -253,13 +253,13 @@ def _fh_apply_clam_theme(root: object, style: object, pal: dict[str, str]) -> tu
 
 
 # Arduino ESP32 boot_app0.bin (8192 bytes), zlib+base64 so flashing works even when
-# the user copies only flash_div.py and not bundled/boot_app0.bin.
+# the user copies only flash_r3x.py and not bundled/boot_app0.bin.
 _EMBEDDED_BOOT_APP0_ZB64 = (
     "eNrt18ERABAQBLBVm4cWjWZPBfyZpIu0JHWwZh8FAAAAPC+X/wMAAAB//H8DFETXmw=="
 )
 
 # 64x64 PNG window icon (dark tile + orange chip). Used when assets/app_icon.png is missing
-# (e.g. user copied only flash_div.py).
+# (e.g. user copied only flash_r3x.py).
 _APP_ICON_PNG_B64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAkUlEQVR42u3bIQ6AMAwF0OkGUbmjcX/JJUAiGYYt9IkvJv9LxbKlLSLOymkAANyH3nuJAAAAAAAAAAAAAAAAAAAAAAC+BTj27TEAAPwAYKTo2wAAAAAAgJUBRkpk5nSMqQArTAMAAAAAAAAAwE0QAAAAAAB4FQYAwN8gAAAAAAAAAAAAAAAAAACoDGB3GEA9gAuipinzYSocjAAAAABJRU5ErkJggg=="
 )
@@ -355,13 +355,13 @@ class ResolvedImages:
 
 def _script_dir() -> Path:
     """
-    Directory that holds flash_div.py and bundled/.
+    Directory that holds flash_r3x.py and bundled/.
 
     Python sometimes reports __file__ inside __pycache__ (.pyc only), or relative paths that
-    resolve against the wrong cwd. Walk ancestors until we find bundled/ or flash_div.py.
-    Override with env ESP32_DIV_FLASHER_HOME if needed.
+    resolve against the wrong cwd. Walk ancestors until we find bundled/ or flash_r3x.py.
+    Override with env ESP32_R3X_FLASHER_HOME if needed.
     """
-    env = os.environ.get("ESP32_DIV_FLASHER_HOME", "").strip()
+    env = os.environ.get("ESP32_R3X_FLASHER_HOME", "").strip()
     if env:
         ep = Path(env).expanduser().resolve()
         if ep.is_dir():
@@ -378,7 +378,7 @@ def _script_dir() -> Path:
         return d
 
     def looks_like_tool_root(d: Path) -> bool:
-        return (d / "bundled").is_dir() or (d / "flash_div.py").is_file()
+        return (d / "bundled").is_dir() or (d / "flash_r3x.py").is_file()
 
     candidates: list[Path] = []
     main_fp = getattr(sys.modules.get("__main__"), "__file__", None)
@@ -546,7 +546,7 @@ def _boot_app0_path(fw_root: Path) -> Path:
     bundled = bundled_boot_app0()
     if bundled.is_file():
         return bundled
-    # Covers installs where only flash_div.py was copied (no bundled/ folder).
+    # Covers installs where only flash_r3x.py was copied (no bundled/ folder).
     return _materialize_embedded_boot_app0()
 
 

@@ -102,17 +102,17 @@ bool isSerialExitRequested() {
 
 void serialAutomationDumpHeap() {
   cliPrintf("[HEAP] Free: %u B, Min Free: %u B, Max Alloc: %u B, PSRAM Free: %u B\n",
-                ESP.getFreeHeap(),
-                ESP.getMinFreeHeap(),
-                ESP.getMaxAllocHeap(),
-                ESP.getFreePsram());
+            ESP.getFreeHeap(),
+            ESP.getMinFreeHeap(),
+            ESP.getMaxAllocHeap(),
+            ESP.getFreePsram());
 }
 
 void serialAutomationDumpStatus() {
   float vBat = readBatteryVoltage();
   const char* mName = (current_menu_index >= 0 && current_menu_index < 8) ? s_menuNames[current_menu_index] : "Unknown";
   cliPrintf("[STATUS] menu_idx=%d (%s), in_sub_menu=%d, sub_idx=%d, feature_active=%d, exit_req=%d, vBat=%.2fV\n",
-                current_menu_index, mName, (int)in_sub_menu, current_submenu_index, (int)feature_active, (int)feature_exit_requested, vBat);
+            current_menu_index, mName, (int)in_sub_menu, current_submenu_index, (int)feature_active, (int)feature_exit_requested, vBat);
 }
 
 // -------------------------------------------------------------
@@ -125,7 +125,7 @@ static bool testProbeSd() {
     uint64_t totalBytes = SD.totalBytes();
     uint64_t usedBytes = SD.usedBytes();
     cliPrintf("[TEST] SD: PASS (Total: %llu MB, Used: %llu MB)\n",
-                  totalBytes / (1024 * 1024), usedBytes / (1024 * 1024));
+              totalBytes / (1024 * 1024), usedBytes / (1024 * 1024));
   } else {
     cliPrintln("[TEST] SD: FAIL (not mounted)");
   }
@@ -164,7 +164,7 @@ static bool testProbeWiFi() {
     cliPrintf("[TEST] WiFi: PASS (Discovered %d APs)\n", n);
     for (int i = 0; i < n && i < 3; i++) {
       cliPrintf("       -> SSID: %-20s RSSI: %d dBm CH: %d\n",
-                    WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
+                WiFi.SSID(i).c_str(), WiFi.RSSI(i), WiFi.channel(i));
     }
   } else {
     cliPrintln("[TEST] WiFi: FAIL (scan failed)");
@@ -229,9 +229,9 @@ static bool testProbeI2C() {
 void serialAutomationRunDiag() {
   cliPrintln("================== HARDWARE PROBE & DIAGNOSTICS ==================");
   cliPrintf("[CHIP] ESP32-S3 rev %d, Cores: %d, CPU: %u MHz\n",
-                ESP.getChipRevision(), ESP.getChipCores(), ESP.getCpuFreqMHz());
+            ESP.getChipRevision(), ESP.getChipCores(), ESP.getCpuFreqMHz());
   cliPrintf("[FLASH] Size: %u MB, Speed: %u MHz, Mode: %d\n",
-                ESP.getFlashChipSize() / (1024 * 1024), ESP.getFlashChipSpeed() / 1000000, ESP.getFlashChipMode());
+            ESP.getFlashChipSize() / (1024 * 1024), ESP.getFlashChipSpeed() / 1000000, ESP.getFlashChipMode());
   serialAutomationDumpHeap();
 
   // I2C bus scan
@@ -248,16 +248,26 @@ void serialAutomationRunDiag() {
   cliPrintln();
 
   // Test individual buses
-  testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeNrf(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeCC1101(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbePN532(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeGPS(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeIR(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeI2C(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
-  testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeSd();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeNrf();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeCC1101();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbePN532();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeGPS();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeIR();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeI2C();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeWiFi();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeBle();
+  vTaskDelay(pdMS_TO_TICKS(50));
+  testProbeBattery();
+  vTaskDelay(pdMS_TO_TICKS(50));
   cliPrintln("==================================================================");
 }
 
@@ -290,16 +300,26 @@ void serialAutomationRunTest(const String& target) {
     serialAutomationDumpHeap();
   } else if (t == "ALL") {
     cliPrintln("================ STARTING AUTOMATED TEST SUITE ================");
-    bool s_sd = testProbeSd(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_nrf = testProbeNrf(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_cc = testProbeCC1101(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_pn = testProbePN532(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_gps = testProbeGPS(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_ir = testProbeIR(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_i2c = testProbeI2C(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_wifi = testProbeWiFi(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_ble = testProbeBle(); vTaskDelay(pdMS_TO_TICKS(50));
-    bool s_bat = testProbeBattery(); vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_sd = testProbeSd();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_nrf = testProbeNrf();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_cc = testProbeCC1101();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_pn = testProbePN532();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_gps = testProbeGPS();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_ir = testProbeIR();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_i2c = testProbeI2C();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_wifi = testProbeWiFi();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_ble = testProbeBle();
+    vTaskDelay(pdMS_TO_TICKS(50));
+    bool s_bat = testProbeBattery();
+    vTaskDelay(pdMS_TO_TICKS(50));
     cliPrintln("====================== TEST MATRIX SUMMARY ======================");
     cliPrintf("[RESULT] SD:      %s\n", s_sd ? "PASS" : "FAIL");
     cliPrintf("[RESULT] NRF24:   %s\n", s_nrf ? "PASS" : "FAIL");

@@ -111,8 +111,28 @@ typedef volatile const uint16_t atomic_const_uint16_t;
 //      Kelvinator protocol, you would use:
 //        `-DDECODE_KELVINATOR=false`
 #ifndef _IR_ENABLE_DEFAULT_
-#define _IR_ENABLE_DEFAULT_ true  // Unless set externally, the default is on.
+#define _IR_ENABLE_DEFAULT_ false  // Optimized: disabled expensive AC protocols
 #endif  // _IR_ENABLE_DEFAULT_
+
+// Protocols needed for ESP32-R3X
+#define SEND_RAW            true
+#define DECODE_HASH         true
+#define DECODE_NEC          true
+#define SEND_NEC            true
+#define DECODE_SONY         true
+#define SEND_SONY           true
+#define DECODE_RC5          true
+#define SEND_RC5            true
+#define DECODE_RC6          true
+#define SEND_RC6            true
+#define DECODE_SAMSUNG      true
+#define SEND_SAMSUNG        true
+#define DECODE_PANASONIC    true
+#define SEND_PANASONIC      true
+#define DECODE_LG           true
+#define SEND_LG             true
+#define DECODE_JVC          true
+#define SEND_JVC            true
 
 // Supported IR protocols
 // Each protocol you include costs memory and, during decode, costs time

@@ -17,16 +17,21 @@ The easiest way to install ESP32-R3X is using precompiled binaries located in th
    ```
 4. Or flash the all-in-one merged binary directly with `esptool.py` (single offset `0x0`):
    ```bash
-   esptool.py -p COM9 -b 921600 --chip esp32s3 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3-merged.bin"
+   esptool.py -p COM9 -b 921600 --chip esp32s3 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-merged.bin"
+   ```
+   Or on Windows simply run:
+   ```cmd
+   Pre-compiled Bin\flash_r3x.bat COM9
    ```
    Or flash split components:
    ```bash
    esptool.py -p COM9 -b 921600 --before default_reset --after hard_reset --chip esp32s3 write_flash \
-     0x0000 "Pre-compiled Bin/bootloader.bin" \
-     0x8000 "Pre-compiled Bin/partitions.bin" \
-     0xe000 "Pre-compiled Bin/boot_app0.bin" \
-     0x10000 "Pre-compiled Bin/ESP32-R3X-v2-v1.7.3.bin"
+     0x0000  "Pre-compiled Bin/bootloader.bin" \
+     0x8000  "Pre-compiled Bin/partitions.bin" \
+     0xe000  "Pre-compiled Bin/boot_app0.bin" \
+     0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
    ```
+
 
 ---
 
