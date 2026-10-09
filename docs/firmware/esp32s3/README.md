@@ -44,10 +44,4 @@ esptool.py --chip esp32s3 --port COM9 --baud 921600 --before default_reset --aft
 ---
 
 ## 📁 Release Packages
-- **`v3.0/`**: Production release binaries for **ESP32-R3X v3.0**. Features:
-  - Universal dynamic menu scrolling with interactive `<` and `>` buttons across all submenus.
-  - Complete 10+ utility suite in the Tools submenu with seamless pagination.
-  - Fixed non-blocking Wi-Fi ARP scanner with station listing without device reboots.
-  - Sub-GHz live FFT waterfall spectrum analyzer and TPMS / Weather station decoder.
-  - Includes `ESP32-R3X-v3.0-merged.bin` and `ESP32-R3X-Flasher-v3.0.zip`.
 - **`v2.0/`**: Production release binaries matching the GitHub Release `v2.0` assets, including `ESP32-R3X-Flasher-v2.0.zip`.

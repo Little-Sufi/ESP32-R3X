@@ -4996,7 +4996,7 @@ namespace NrfAnalyzer {
 
     void drawAnalyzerUI() {
         tft.fillScreen(TFT_BLACK);
-        GadgetUI::drawTacticalHeader("NRF_ANALYZER_v2.0");
+        GadgetUI::drawTacticalHeader("NRF_ANALYZER_v3.0");
         GadgetUI::drawGlowWindow(10, 45, 220, 150, "SPECTRUM_DATA");
         
         GadgetUI::drawTerminalBox(10, 205, 220, 60);

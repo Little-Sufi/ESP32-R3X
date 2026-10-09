@@ -15,6 +15,7 @@
 extern "C" {
 #include "lwip/etharp.h"
 #include "lwip/netif.h"
+#include "lwip/tcpip.h"
 }
 
 /** Active-scan dwell per channel for STA scans (Arduino default 300 ms; shared.h WIFI_SCAN_ACTIVE_MS). */
@@ -2827,7 +2828,7 @@ int credPage = 0;
 
 String inputSSID = "";
 
-const char* seriesSSIDs[] = {"ESP32DIV_AP", "FreeWiFi", "Loading..."};
+const char* seriesSSIDs[] = {"ESP32-R3X_AP", "FreeWiFi", "Loading..."};
 const int numSeriesSSIDs = 3;
 int seriesSSIDIndex = 0;
 
@@ -7639,8 +7640,34 @@ static void runArpSweep() {
     return;
   }
 
-  displayBusy("ARP Scanning.", "Probing local subnet.");
+  displayBusy("ARP Scanning.", "Waiting for DHCP lease...");
   updateNavLabels();
+
+  // Wait for DHCP lease to assign a valid IP and subnet mask
+  uint32_t ipWaitStart = millis();
+  while (((uint32_t)WiFi.localIP() == 0 || (uint32_t)WiFi.subnetMask() == 0) && (millis() - ipWaitStart < 5000)) {
+    delay(100);
+    yield();
+    if (WiFi.status() != WL_CONNECTED || feature_exit_requested) {
+      s_scanning = false;
+      displayBusy("Link lost.", "WiFi disconnected.");
+      delay(700);
+      s_phase = Phase::ApList;
+      drawScreen(true);
+      return;
+    }
+  }
+
+  if ((uint32_t)WiFi.localIP() == 0) {
+    s_scanning = false;
+    displayBusy("No IP acquired.", "DHCP lease failed.");
+    delay(800);
+    s_phase = Phase::ApList;
+    drawScreen(true);
+    return;
+  }
+
+  displayBusy("ARP Scanning.", "Probing local subnet.");
 
   // Stable progress line under the status text (no wipe / no status-bar churn).
   int lastProgHosts = -1;
@@ -7693,11 +7720,24 @@ static void runArpSweep() {
   if (gw != 0 && gw != localIp) {
     ip4_addr_t target;
     target.addr = gw;
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+    LOCK_TCPIP_CORE();
+#endif
     etharp_request(nif, &target);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+    UNLOCK_TCPIP_CORE();
+#endif
     delay(ARP_BATCH_WAIT_MS);
     struct eth_addr* eth = nullptr;
     const ip4_addr_t* tip = nullptr;
-    if (etharp_find_addr(nif, &target, &eth, &tip) >= 0 && eth) {
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+    LOCK_TCPIP_CORE();
+#endif
+    err_t errFind = etharp_find_addr(nif, &target, &eth, &tip);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+    UNLOCK_TCPIP_CORE();
+#endif
+    if (errFind >= 0 && eth) {
       tryStoreHost(gw, eth->addr);
       paintHostProgress();
     }
@@ -7708,7 +7748,7 @@ static void runArpSweep() {
   uint8_t statusTick = 0;
 
   for (uint32_t host = startHost; host <= endHost; host++) {
-    if (feature_exit_requested) {
+    if (feature_exit_requested || WiFi.status() != WL_CONNECTED) {
       break;
     }
     if (host == localIp || host == broadcast || host == network) {
@@ -7719,15 +7759,29 @@ static void runArpSweep() {
       for (int i = 0; i < batchCount; i++) {
         ip4_addr_t target;
         target.addr = batchIps[i];
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+        LOCK_TCPIP_CORE();
+#endif
         etharp_request(nif, &target);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+        UNLOCK_TCPIP_CORE();
+#endif
       }
       delay(ARP_BATCH_WAIT_MS);
+      yield();
       for (int i = 0; i < batchCount; i++) {
         ip4_addr_t target;
         target.addr = batchIps[i];
         struct eth_addr* eth = nullptr;
         const ip4_addr_t* tip = nullptr;
-        if (etharp_find_addr(nif, &target, &eth, &tip) >= 0 && eth) {
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+        LOCK_TCPIP_CORE();
+#endif
+        err_t errFind = etharp_find_addr(nif, &target, &eth, &tip);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+        UNLOCK_TCPIP_CORE();
+#endif
+        if (errFind >= 0 && eth) {
           tryStoreHost(batchIps[i], eth->addr);
         }
       }
@@ -7736,22 +7790,38 @@ static void runArpSweep() {
       if ((++statusTick & 0x07) == 0) {
         updateStatusBar();
       }
+      delay(5);
+      yield();
     }
   }
 
-  if (batchCount > 0) {
+  if (batchCount > 0 && WiFi.status() == WL_CONNECTED && !feature_exit_requested) {
     for (int i = 0; i < batchCount; i++) {
       ip4_addr_t target;
       target.addr = batchIps[i];
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+      LOCK_TCPIP_CORE();
+#endif
       etharp_request(nif, &target);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+      UNLOCK_TCPIP_CORE();
+#endif
     }
     delay(ARP_BATCH_WAIT_MS);
+    yield();
     for (int i = 0; i < batchCount; i++) {
       ip4_addr_t target;
       target.addr = batchIps[i];
       struct eth_addr* eth = nullptr;
       const ip4_addr_t* tip = nullptr;
-      if (etharp_find_addr(nif, &target, &eth, &tip) >= 0 && eth) {
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+      LOCK_TCPIP_CORE();
+#endif
+      err_t errFind = etharp_find_addr(nif, &target, &eth, &tip);
+#if defined(LWIP_TCPIP_CORE_LOCKING) && LWIP_TCPIP_CORE_LOCKING
+      UNLOCK_TCPIP_CORE();
+#endif
+      if (errFind >= 0 && eth) {
         tryStoreHost(batchIps[i], eth->addr);
       }
     }

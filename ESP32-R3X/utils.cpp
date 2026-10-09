@@ -475,12 +475,21 @@ void requestStatusBarRedraw() {
   statusBarDirty = true;
 }
 
+#include "fuel_gauge.h"
+
 const float R1 = 100000.0;
 const float R2 = 100000.0;
 
 float readBatteryVoltage()
 {
-#if !defined(BATTERY_ADC_PIN) || (BATTERY_ADC_PIN < 0) || (BATTERY_ADC_PIN == 255)
+  float fgVolt = FuelGauge::getVoltage();
+  if (fgVolt > 0.0f) {
+      return fgVolt;
+  }
+
+#if defined(BOARD_HAS_ESP32S3) || (defined(BATTERY_ADC_PIN) && (BATTERY_ADC_PIN == 2))
+  return 4.15f; // GPIO 2 is I2C SCL bus on ESP32-S3 R3X hardware
+#elif !defined(BATTERY_ADC_PIN) || (BATTERY_ADC_PIN < 0) || (BATTERY_ADC_PIN == 255)
   return 4.15f;
 #else
   if (BATTERY_ADC_PIN < 0 || BATTERY_ADC_PIN == 255) return 4.15f;
@@ -770,7 +779,7 @@ void startStatusBarTask() {
   xTaskCreatePinnedToCore(
     statusBarTask,
     "statusBar",
-    2048,
+    4096,
     nullptr,
     1,
     &statusBarTaskHandle,
@@ -1277,38 +1286,51 @@ void displayLogo(uint16_t color, int displayTime) {
   int16_t screenWidth = tft.width();
   int16_t screenHeight = tft.height();
   int16_t logoX = (screenWidth - bitmapWidth) / 2;
-  int16_t logoY = (screenHeight - bitmapHeight) / 2 - 25;
+  int16_t logoY = 15;
 
   tft.fillScreen(TFT_BLACK);
+
+  // Background subtle tech reticle lines
+  tft.drawFastHLine(0, 10, screenWidth, 0x0821);
+  tft.drawFastHLine(0, screenHeight - 10, screenWidth, 0x0821);
+  tft.drawFastVLine(10, 0, screenHeight, 0x0821);
+  tft.drawFastVLine(screenWidth - 11, 0, screenHeight, 0x0821);
+
   drawFast1bppBitmap(logoX, logoY, bitmap_icon_r3x_logo, bitmapWidth, bitmapHeight, TFT_WHITE, TFT_BLACK);
 
-  tft.setTextColor(TFT_WHITE);
-  tft.setTextFont(1);
+  // Glowing V3.0 Tactical Banner Box
+  tft.fillRect(15, 230, screenWidth - 30, 48, 0x0842);
+  tft.drawRect(15, 230, screenWidth - 30, 48, CYBER_CYAN);
+  tft.drawRect(16, 231, screenWidth - 32, 46, CYBER_ORANGE);
 
-  tft.setTextSize(2);
-  int16_t textX = screenWidth / 3.5;
-  int16_t textY = logoY + bitmapHeight + 10;
-  tft.setCursor(textX, textY);
-  tftPrintObf(OBF_PN, sizeof(OBF_PN));
-
+  // Title: ESP32-R3X V3.0
+  tft.setTextFont(2);
   tft.setTextSize(1);
-  textX = screenWidth / 3.5;
-  textY += 20;
-  tft.setCursor(textX, textY);
+  tft.setTextColor(CYBER_ORANGE, 0x0842);
+  tft.setCursor(24, 235);
+  tftPrintObf(OBF_PN, sizeof(OBF_PN));
+  tft.setTextColor(CYBER_CYAN, 0x0842);
+  tft.print("  V3.0");
+
+  // Subtitle
+  tft.setTextFont(1);
+  tft.setTextColor(TFT_WHITE, 0x0842);
+  tft.setCursor(24, 258);
   tft.print("by ");
   tftPrintObf(OBF_DN, sizeof(OBF_DN));
+  tft.setTextColor(GREEN, 0x0842);
+  tft.print("  [N16R8 TACTICAL]");
 
-  textX = screenWidth / 2.5;
-  textY += 30;
-  tft.setCursor(textX, textY);
-  // Version is intentionally NOT obfuscated.
-  tft.print(ESP32DIV_VERSION);
+  // Bottom Status
+  tft.setTextColor(0x7BEF, TFT_BLACK);
+  tft.setCursor((screenWidth - tft.textWidth("ARMING ALL RF & CYBER ARSENAL...")) / 2, 288);
+  tft.print("ARMING ALL RF & CYBER ARSENAL...");
 
   Serial.println("==================================");
   serialPrintObf(OBF_PN, sizeof(OBF_PN), true);
   Serial.print("Developed by: "); serialPrintObf(OBF_DN, sizeof(OBF_DN), true);
-  // Version is intentionally NOT obfuscated.
   Serial.print("Version:      "); Serial.println(ESP32DIV_VERSION);
+  Serial.print("Hardware:     ESP32-S3 N16R8 (16MB Flash, 8MB PSRAM)\n");
   Serial.print("Contact:      littlesufi3@gmail.com\n");
   Serial.print("GitHub:       "); serialPrintObf(OBF_GH, sizeof(OBF_GH), true);
   Serial.print("Website:      "); serialPrintObf(OBF_WB, sizeof(OBF_WB), true);
@@ -1553,11 +1575,13 @@ bool checkIR() {
 }
 
 bool checkI2C() {
+  Wire.setTimeOut(20);
   Wire.beginTransmission(0x20);
   if (Wire.endTransmission() == 0) return true;
   Wire.beginTransmission(0x38);
   if (Wire.endTransmission() == 0) return true;
   for (uint8_t addr = 0x08; addr <= 0x77; addr++) {
+    yield();
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) return true;
   }

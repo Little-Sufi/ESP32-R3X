@@ -9,15 +9,19 @@
 #include "icon.h"
 #include "ir.h"
 #include "gps.h"
+#include "automotive.h"
+#include "fuel_gauge.h"
+#include "haptic.h"
+#include "subghz_features.h"
+#include "tools_features.h"
 #include "rfid.h"
 #include "shared.h"
 #include "utils.h"
 #include "SerialAutomation.h"
 
-#if !BOARD_HAS_ESP32S3
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#endif
+#include "esp_private/brownout.h"
 
 void bleGlobalInit();
 
@@ -67,7 +71,7 @@ const char *submenu_items[NUM_SUBMENU_ITEMS] = {
     "Probe Request Flood",
     "Deauth Detector",
     "WiFi Scanner",
-    "Captive Portal",
+    "Evil Twin Portal",
     "Hidden SSID Revealer",
     "WPS Scanner",
     "ARP Scanner",
@@ -87,7 +91,7 @@ const char *wifi_page0_items[WIFI_PAGE0_FEATURES] = {
     "Probe Request Flood",
     "Deauth Detector",
     "WiFi Scanner",
-    "Captive Portal",
+    "Evil Twin Portal",
     "Hidden SSID Revealer"};
 
 const char *wifi_page1_items[WIFI_PAGE1_FEATURES] = {
@@ -128,16 +132,18 @@ const char *nrf_submenu_items[nrf_NUM_SUBMENU_ITEMS] = {
     "MouseJack Inject",
     "Back to Main Menu"};
 
-const int subghz_NUM_SUBMENU_ITEMS = 6;
+const int subghz_NUM_SUBMENU_ITEMS = 8;
 const char *subghz_submenu_items[subghz_NUM_SUBMENU_ITEMS] = {
     "Replay Attack",
     "SubGHz Jammer",
     "De Bruijn / Brute",
     "Jamming Detector",
     "Saved Profile",
+    "FFT Waterfall",
+    "TPMS Decoder",
     "Back to Main Menu"};
 
-const int tools_NUM_SUBMENU_ITEMS = 7;
+const int tools_NUM_SUBMENU_ITEMS = 10;
 const char *tools_submenu_items[tools_NUM_SUBMENU_ITEMS] = {
     "Serial Monitor",
     "Update Firmware",
@@ -145,19 +151,24 @@ const char *tools_submenu_items[tools_NUM_SUBMENU_ITEMS] = {
     "Hardware Info",
     "SD File Manager",
     "GPIO Dashboard",
+    "BadUSB DuckyScript",
+    "Web Cyberdeck",
+    "UI Theme Engine",
     "Back to Main Menu"};
 
 static constexpr uint8_t OTHER_LAYER_HOME = 0;
 static constexpr uint8_t OTHER_LAYER_IR   = 1;
 static constexpr uint8_t OTHER_LAYER_RFID = 2;
 static constexpr uint8_t OTHER_LAYER_GPS  = 3;
+static constexpr uint8_t OTHER_LAYER_AUTO = 4;
 
-const int other_NUM_SUBMENU_ITEMS = 4;
+const int other_NUM_SUBMENU_ITEMS = 5;
 static constexpr int OTHER_GRID_COLS = 2;
 const char *other_submenu_items[other_NUM_SUBMENU_ITEMS] = {
     "IR Remote",
     "RFID/NFC",
     "GPS",
+    "Automotive",
     "Main Menu"};
 
 const int rfid_NUM_SUBMENU_ITEMS = 9;
@@ -177,6 +188,13 @@ const char *gps_submenu_items[gps_NUM_SUBMENU_ITEMS] = {
     "Wardriver",
     "Satellite Scanner",
     "Back to Main Menu"};
+
+const int auto_NUM_SUBMENU_ITEMS = 3;
+const char *auto_submenu_items[auto_NUM_SUBMENU_ITEMS] = {
+    "CAN Sniffer",
+    "CAN Fuzz/Inject",
+    "Back to Main Menu"};
+
 
 const int ir_NUM_SUBMENU_ITEMS = 4;
 const char *ir_submenu_items[ir_NUM_SUBMENU_ITEMS] = {
@@ -269,6 +287,8 @@ const unsigned char *subghz_submenu_icons[subghz_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_graph_self_loop,
     bitmap_icon_Voice_Id,
     bitmap_icon_list,
+    bitmap_icon_analyzer,
+    bitmap_icon_stat,
     bitmap_icon_go_back
 };
 
@@ -279,6 +299,9 @@ const unsigned char *tools_submenu_icons[tools_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_stat,
     bitmap_icon_sdcard,
     bitmap_icon_list,
+    bitmap_icon_rubber_ducky,
+    bitmap_icon_wifi,
+    bitmap_icon_setting,
     bitmap_icon_go_back
 };
 
@@ -286,6 +309,7 @@ const unsigned char *other_submenu_icons[other_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_led,
     bitmap_icon_rfid_chip,
     bitmap_icon_satellite,
+    bitmap_icon_stat,
     bitmap_icon_go_back
 };
 
@@ -307,6 +331,13 @@ const unsigned char *gps_submenu_icons[gps_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_go_back
 };
 
+const unsigned char *auto_submenu_icons[auto_NUM_SUBMENU_ITEMS] = {
+    bitmap_icon_stat,
+    bitmap_icon_spoofer,
+    bitmap_icon_go_back
+};
+
+
 const unsigned char *ir_submenu_icons[ir_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_led,
     bitmap_icon_list,
@@ -321,6 +352,9 @@ const unsigned char *about_submenu_icons[about_NUM_SUBMENU_ITEMS] = {
 const unsigned char *setting_submenu_icons[setting_NUM_SUBMENU_ITEMS] = {
     bitmap_icon_go_back
 };
+
+void handleButtons();
+static void drawTouchNavBar();
 
 const unsigned char **active_submenu_icons = nullptr;
 
@@ -381,32 +415,42 @@ static void drawPagedFooterButtons() {
     const int rowH = 28;
     const int iconSize = 16;
     tft.fillRect(0, y, tft.width(), rowH, UI_BG);
+    tft.drawFastHLine(0, y, tft.width(), CYBER_CYAN);
 
     tft.setTextDatum(TL_DATUM);
     tft.setTextFont(2);
     tft.setTextSize(1);
-    // Font 2 is ~16px; center icon + text on the same midline within the row.
     const int textH = 16;
     const int iconY = y + (rowH - iconSize) / 2;
     const int textY = y + (rowH - textH) / 2;
 
     {
-        const uint16_t color = (s_pagedFooterFocus == 0) ? UI_ICON : UI_TEXT;
-        tft.setTextColor(color, UI_BG);
-        tft.drawBitmap(10, iconY, bitmap_icon_go_back, iconSize, iconSize, color);
-        tft.setCursor(30, textY);
+        const bool focused = (s_pagedFooterFocus == 0);
+        if (focused) {
+            tft.fillRoundRect(6, y + 2, 105, rowH - 4, 3, 0x01E8);
+            tft.drawRoundRect(6, y + 2, 105, rowH - 4, 3, CYBER_CYAN);
+        }
+        const uint16_t color = focused ? CYBER_ORANGE : UI_TEXT;
+        tft.setTextColor(color, focused ? 0x01E8 : UI_BG);
+        tft.drawBitmap(12, iconY, bitmap_icon_go_back, iconSize, iconSize, color);
+        tft.setCursor(32, textY);
         tft.print("Main Menu");
     }
 
     {
-        const uint16_t color = (s_pagedFooterFocus == 1) ? UI_ICON : UI_TEXT;
+        const bool focused = (s_pagedFooterFocus == 1);
         const char* label = pagedPageBtnLabel();
         const int gap = 4;
         const int textW = tft.textWidth(label);
-        // Right-aligned group: [label][gap][icon] — same vertical midline.
-        const int iconX = tft.width() - 10 - iconSize;
+        const int iconX = tft.width() - 12 - iconSize;
         const int textX = iconX - gap - textW;
-        tft.setTextColor(color, UI_BG);
+
+        if (focused) {
+            tft.fillRoundRect(textX - 8, y + 2, tft.width() - textX + 6, rowH - 4, 3, 0x01E8);
+            tft.drawRoundRect(textX - 8, y + 2, tft.width() - textX + 6, rowH - 4, 3, CYBER_CYAN);
+        }
+        const uint16_t color = focused ? CYBER_ORANGE : UI_TEXT;
+        tft.setTextColor(color, focused ? 0x01E8 : UI_BG);
         tft.setCursor(textX, textY);
         tft.print(label);
         tft.drawBitmap(iconX, iconY, pagedPageBtnIcon(), iconSize, iconSize, color);
@@ -476,6 +520,10 @@ void updateActiveSubmenu() {
                 active_submenu_items = gps_submenu_items;
                 active_submenu_size = gps_NUM_SUBMENU_ITEMS;
                 active_submenu_icons = gps_submenu_icons;
+            } else if (other_layer == OTHER_LAYER_AUTO) {
+                active_submenu_items = auto_submenu_items;
+                active_submenu_size = auto_NUM_SUBMENU_ITEMS;
+                active_submenu_icons = auto_submenu_icons;
             } else {
                 active_submenu_items = other_submenu_items;
                 active_submenu_size = other_NUM_SUBMENU_ITEMS;
@@ -786,22 +834,30 @@ bool isTouchNavButtonPressedEdge(int buttonPin) {
 }
 
 bool isButtonPressedEdge(int buttonPin) {
+  bool pressed = false;
   if (isSerialButtonPressedEdge(buttonPin)) {
-    return true;
+    pressed = true;
   }
 #if HAS_PCF8574_BUTTONS
-  if (getPcf8574Address() != 0) {
+  else if (getPcf8574Address() != 0) {
     const int idx = buttonPin % 8;
     const bool cur = pcf.digitalRead(buttonPin);
     const bool edge = !cur && s_pcfButtonLastState[idx];
     s_pcfButtonLastState[idx] = cur;
     if (edge) {
-      return true;
+      pressed = true;
     }
   }
 #endif
 
-  return isTouchNavButtonPressedEdge(buttonPin);
+  if (!pressed) {
+    pressed = isTouchNavButtonPressedEdge(buttonPin);
+  }
+
+  if (pressed) {
+    Haptic::click();
+  }
+  return pressed;
 }
 
 bool featureExitButtonPressed() {
@@ -853,10 +909,12 @@ int last_menu_index = -1;
 bool menu_initialized = false;
 
 const int CARD_W      = 112;
-const int CARD_H      = 70;
-const int CARD_GAP    = 4;
-const int CARD_PADX   = 6;
-const int CARD_PADY   = 24;
+const int CARD_H      = 57;
+const int CARD_GAP_X  = 6;
+const int CARD_GAP_Y  = 3;
+const int CARD_GAP    = CARD_GAP_X;
+const int CARD_PADX   = 5;
+const int CARD_PADY   = 40;
 
 const uint16_t ACCENT_CLR[NUM_MENU_ITEMS] = {
   0x07FF, // TFT_CYAN    (WiFi)
@@ -886,6 +944,54 @@ static int submenuItemY(int index) {
     return 30 + index * 30;
 }
 
+static void drawSubmenuRow(int i, bool selected) {
+    if (i < 0 || i >= active_submenu_size || !active_submenu_items || !active_submenu_items[i]) return;
+    const int yPos = submenuItemY(i);
+    const bool isBack = (i == active_submenu_size - 1);
+
+    if (selected) {
+        tft.fillRoundRect(4, yPos - 3, 232, 26, 4, 0x01E8);
+        tft.drawRoundRect(4, yPos - 3, 232, 26, 4, CYBER_CYAN);
+        tft.drawFastHLine(8, yPos + 22, 224, CYBER_ORANGE);
+
+        tft.setTextColor(CYBER_ORANGE, 0x01E8);
+        tft.setTextFont(1);
+        tft.setTextSize(1);
+        tft.setCursor(8, yPos + 6);
+        tft.print(">");
+
+        if (active_submenu_icons && active_submenu_icons[i]) {
+            tft.drawBitmap(20, yPos + 2, active_submenu_icons[i], 16, 16, CYBER_ORANGE);
+        }
+
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setTextColor(TFT_WHITE, 0x01E8);
+        tft.setCursor(42, yPos + 3);
+        tft.print(active_submenu_items[i]);
+
+        if (!isBack) {
+            tft.setTextFont(1);
+            tft.setTextColor(CYBER_CYAN, 0x01E8);
+            tft.setCursor(212, yPos + 6);
+            tft.printf("#%d", i + 1);
+        }
+    } else {
+        tft.fillRect(4, yPos - 3, 232, 26, UI_BG);
+        tft.drawFastHLine(10, yPos + 23, 220, 0x10A2);
+
+        if (active_submenu_icons && active_submenu_icons[i]) {
+            tft.drawBitmap(20, yPos + 2, active_submenu_icons[i], 16, 16, CYBER_CYAN);
+        }
+
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setTextColor(isBack ? CYBER_ORANGE : 0xD6BA, UI_BG);
+        tft.setCursor(42, yPos + 3);
+        tft.print(active_submenu_items[i]);
+    }
+}
+
 void displaySubmenu() {
     setTouchButtonInputEnabled(false);
 
@@ -905,57 +1011,76 @@ void displaySubmenu() {
     tft.setTextFont(2);
     tft.setTextSize(1);
 
+    if (!active_submenu_items || active_submenu_size <= 0) {
+        return;
+    }
+
     if (!submenu_initialized) {
         tft.fillScreen(UI_BG);
 
         for (int i = 0; i < active_submenu_size; i++) {
-            const int yPos = submenuItemY(i);
-            const bool isBack = (i == active_submenu_size - 1);
-
-            tft.setTextColor(UI_TEXT, UI_BG);
-            tft.drawBitmap(10, yPos, active_submenu_icons[i], 16, 16, UI_TEXT);
-            tft.setCursor(30, yPos);
-            if (!isBack) {
-                tft.print("| ");
-            }
-            tft.print(active_submenu_items[i]);
+            drawSubmenuRow(i, i == current_submenu_index);
         }
 
         submenu_initialized = true;
-        last_submenu_index = -1;
+        last_submenu_index = current_submenu_index;
     }
 
     if (last_submenu_index != current_submenu_index) {
-        if (last_submenu_index >= 0) {
-            const int prev_yPos = submenuItemY(last_submenu_index);
-            const bool prevBack = (last_submenu_index == active_submenu_size - 1);
-
-            tft.fillRect(0, prev_yPos, tft.width(), 28, UI_BG);
-            tft.setTextColor(UI_TEXT, UI_BG);
-            tft.drawBitmap(10, prev_yPos, active_submenu_icons[last_submenu_index], 16, 16, UI_TEXT);
-            tft.setCursor(30, prev_yPos);
-            if (!prevBack) {
-                tft.print("| ");
-            }
-            tft.print(active_submenu_items[last_submenu_index]);
+        if (last_submenu_index >= 0 && last_submenu_index < active_submenu_size) {
+            drawSubmenuRow(last_submenu_index, false);
         }
-
-        const int new_yPos = submenuItemY(current_submenu_index);
-        const bool newBack = (current_submenu_index == active_submenu_size - 1);
-
-        tft.fillRect(0, new_yPos, tft.width(), 28, UI_BG);
-        tft.setTextColor(UI_ICON, UI_BG);
-        tft.drawBitmap(10, new_yPos, active_submenu_icons[current_submenu_index], 16, 16, UI_ICON);
-        tft.setCursor(30, new_yPos);
-        if (!newBack) {
-            tft.print("| ");
-        }
-        tft.print(active_submenu_items[current_submenu_index]);
-
+        drawSubmenuRow(current_submenu_index, true);
         last_submenu_index = current_submenu_index;
     }
 
     drawStatusBar(currentBatteryVoltage, true);
+}
+
+static void drawPagedSubmenuRow(int i, bool selected) {
+    const int featureCount = pagedFeatureCount();
+    if (i < 0 || i >= featureCount || !active_submenu_items || !active_submenu_items[i]) return;
+    const int yPos = 30 + i * 30;
+
+    if (selected) {
+        tft.fillRoundRect(4, yPos - 3, 232, 26, 4, 0x01E8);
+        tft.drawRoundRect(4, yPos - 3, 232, 26, 4, CYBER_CYAN);
+        tft.drawFastHLine(8, yPos + 22, 224, CYBER_ORANGE);
+
+        tft.setTextColor(CYBER_ORANGE, 0x01E8);
+        tft.setTextFont(1);
+        tft.setTextSize(1);
+        tft.setCursor(8, yPos + 6);
+        tft.print(">");
+
+        if (active_submenu_icons && active_submenu_icons[i]) {
+            tft.drawBitmap(20, yPos + 2, active_submenu_icons[i], 16, 16, CYBER_ORANGE);
+        }
+
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setTextColor(TFT_WHITE, 0x01E8);
+        tft.setCursor(42, yPos + 3);
+        tft.print(active_submenu_items[i]);
+
+        tft.setTextFont(1);
+        tft.setTextColor(CYBER_CYAN, 0x01E8);
+        tft.setCursor(212, yPos + 6);
+        tft.printf("#%d", i + 1);
+    } else {
+        tft.fillRect(4, yPos - 3, 232, 26, UI_BG);
+        tft.drawFastHLine(10, yPos + 23, 220, 0x10A2);
+
+        if (active_submenu_icons && active_submenu_icons[i]) {
+            tft.drawBitmap(20, yPos + 2, active_submenu_icons[i], 16, 16, CYBER_CYAN);
+        }
+
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setTextColor(0xD6BA, UI_BG);
+        tft.setCursor(42, yPos + 3);
+        tft.print(active_submenu_items[i]);
+    }
 }
 
 void displayPagedSubmenu() {
@@ -963,42 +1088,25 @@ void displayPagedSubmenu() {
     last_menu_index = -1;
 
     const int featureCount = pagedFeatureCount();
-    tft.setTextFont(2);
-    tft.setTextSize(1);
 
     if (!submenu_initialized) {
         tft.fillScreen(UI_BG);
         for (int i = 0; i < featureCount; i++) {
-            const int yPos = 30 + i * 30;
-            tft.setTextColor(UI_TEXT, UI_BG);
-            tft.drawBitmap(10, yPos, active_submenu_icons[i], 16, 16, UI_TEXT);
-            tft.setCursor(30, yPos);
-            tft.print("| ");
-            tft.print(active_submenu_items[i]);
+            drawPagedSubmenuRow(i, i == current_submenu_index);
         }
         drawPagedFooterButtons();
         submenu_initialized = true;
-        last_submenu_index = -1;
+        last_submenu_index = current_submenu_index;
         s_pagedFooterFocus = -1;
     }
 
     if (last_submenu_index != current_submenu_index) {
         if (last_submenu_index >= 0 && last_submenu_index < featureCount) {
-            const int prev_yPos = 30 + last_submenu_index * 30;
-            tft.setTextColor(UI_TEXT, UI_BG);
-            tft.drawBitmap(10, prev_yPos, active_submenu_icons[last_submenu_index], 16, 16, UI_TEXT);
-            tft.setCursor(30, prev_yPos);
-            tft.print("| ");
-            tft.print(active_submenu_items[last_submenu_index]);
+            drawPagedSubmenuRow(last_submenu_index, false);
         }
 
         if (current_submenu_index >= 0 && current_submenu_index < featureCount) {
-            const int new_yPos = 30 + current_submenu_index * 30;
-            tft.setTextColor(UI_ICON, UI_BG);
-            tft.drawBitmap(10, new_yPos, active_submenu_icons[current_submenu_index], 16, 16, UI_ICON);
-            tft.setCursor(30, new_yPos);
-            tft.print("| ");
-            tft.print(active_submenu_items[current_submenu_index]);
+            drawPagedSubmenuRow(current_submenu_index, true);
             s_pagedFooterFocus = -1;
         } else if (current_submenu_index == pagedBackBtnIndex()) {
             s_pagedFooterFocus = 0;
@@ -1025,86 +1133,233 @@ void displayOtherMenuGrid() {
 
     tft.setTextFont(2);
 
+    auto drawOtherCard = [](int i, bool selected) {
+        int column = i % OTHER_GRID_COLS;
+        int row = i / OTHER_GRID_COLS;
+        int x_position = (column == 0) ? X_OFFSET_LEFT : X_OFFSET_RIGHT;
+        int y_position = Y_START + row * Y_SPACING;
+
+        if (selected) {
+            tft.fillRoundRect(x_position, y_position, 100, 60, 4, 0x0228);
+            tft.drawRoundRect(x_position, y_position, 100, 60, 4, CYBER_ORANGE);
+            tft.drawRoundRect(x_position + 1, y_position + 1, 98, 58, 4, CYBER_CYAN);
+            tft.drawFastHLine(x_position + 4, y_position + 2, 92, CYBER_ORANGE);
+
+            if (other_submenu_icons[i]) {
+                tft.drawBitmap(x_position + 42, y_position + 10, other_submenu_icons[i], 16, 16, CYBER_ORANGE);
+            }
+            int textWidth = tft.textWidth(other_submenu_items[i]);
+            int textX = x_position + (100 - textWidth) / 2;
+            int textY = y_position + 34;
+            tft.setTextColor(TFT_WHITE, 0x0228);
+            tft.setCursor(textX, textY);
+            tft.print(other_submenu_items[i]);
+        } else {
+            tft.fillRoundRect(x_position, y_position, 100, 60, 4, 0x10A2);
+            tft.drawRoundRect(x_position, y_position, 100, 60, 4, 0x2965);
+            tft.fillRect(x_position + 4, y_position + 1, 92, 2, CYBER_CYAN);
+
+            if (other_submenu_icons[i]) {
+                tft.drawBitmap(x_position + 42, y_position + 10, other_submenu_icons[i], 16, 16, CYBER_CYAN);
+            }
+            int textWidth = tft.textWidth(other_submenu_items[i]);
+            int textX = x_position + (100 - textWidth) / 2;
+            int textY = y_position + 34;
+            tft.setTextColor(TFT_WHITE, 0x10A2);
+            tft.setCursor(textX, textY);
+            tft.print(other_submenu_items[i]);
+        }
+    };
+
     if (!other_menu_grid_initialized) {
         tft.fillScreen(UI_BG);
 
         for (int i = 0; i < other_NUM_SUBMENU_ITEMS; i++) {
-            int column = i % OTHER_GRID_COLS;
-            int row = i / OTHER_GRID_COLS;
-            int x_position = (column == 0) ? X_OFFSET_LEFT : X_OFFSET_RIGHT;
-            int y_position = Y_START + row * Y_SPACING;
-
-            tft.fillRoundRect(x_position, y_position, 100, 60, 5, UI_FG);
-            tft.drawRoundRect(x_position, y_position, 100, 60, 5, UI_LINE);
-            tft.drawBitmap(x_position + 42, y_position + 10, other_submenu_icons[i], 16, 16, UI_ICON);
-
-            tft.setTextColor(UI_TEXT, UI_FG);
-            int textWidth = tft.textWidth(other_submenu_items[i]);
-            int textX = x_position + (100 - textWidth) / 2;
-            int textY = y_position + 30;
-            tft.setCursor(textX, textY);
-            tft.print(other_submenu_items[i]);
+            drawOtherCard(i, i == current_submenu_index);
         }
 
         other_menu_grid_initialized = true;
-        last_other_menu_index = -1;
+        last_other_menu_index = current_submenu_index;
     }
 
     if (last_other_menu_index != current_submenu_index) {
-        for (int i = 0; i < other_NUM_SUBMENU_ITEMS; i++) {
-            int column = i % OTHER_GRID_COLS;
-            int row = i / OTHER_GRID_COLS;
-            int x_position = (column == 0) ? X_OFFSET_LEFT : X_OFFSET_RIGHT;
-            int y_position = Y_START + row * Y_SPACING;
-
-            if (i == last_other_menu_index) {
-                tft.fillRoundRect(x_position, y_position, 100, 60, 5, UI_FG);
-                tft.drawRoundRect(x_position, y_position, 100, 60, 5, UI_LINE);
-                tft.setTextColor(UI_TEXT, UI_FG);
-                tft.drawBitmap(x_position + 42, y_position + 10,
-                               other_submenu_icons[last_other_menu_index], 16, 16, UI_ICON);
-                int textWidth = tft.textWidth(other_submenu_items[last_other_menu_index]);
-                int textX = x_position + (100 - textWidth) / 2;
-                int textY = y_position + 30;
-                tft.setCursor(textX, textY);
-                tft.print(other_submenu_items[last_other_menu_index]);
-            }
+        if (last_other_menu_index >= 0 && last_other_menu_index < other_NUM_SUBMENU_ITEMS) {
+            drawOtherCard(last_other_menu_index, false);
         }
-
-        int column = current_submenu_index % OTHER_GRID_COLS;
-        int row = current_submenu_index / OTHER_GRID_COLS;
-        int x_position = (column == 0) ? X_OFFSET_LEFT : X_OFFSET_RIGHT;
-        int y_position = Y_START + row * Y_SPACING;
-
-        tft.fillRoundRect(x_position, y_position, 100, 60, 5, UI_FG);
-        tft.drawRoundRect(x_position, y_position, 100, 60, 5, UI_ICON);
-
-        tft.setTextColor(UI_ICON, UI_FG);
-        tft.drawBitmap(x_position + 42, y_position + 10, other_submenu_icons[current_submenu_index],
-                       16, 16, SELECTED_ICON_COLOR);
-        int textWidth = tft.textWidth(other_submenu_items[current_submenu_index]);
-        int textX = x_position + (100 - textWidth) / 2;
-        int textY = y_position + 30;
-        tft.setCursor(textX, textY);
-        tft.print(other_submenu_items[current_submenu_index]);
-
+        drawOtherCard(current_submenu_index, true);
         last_other_menu_index = current_submenu_index;
     }
 
     drawStatusBar(currentBatteryVoltage, true);
 }
 
-/** Main menu "Other" tile (index 2): triple preview icons (LED / satellite / dots). */
+/** Main menu "Other" tile (index 2): preview icon */
 static constexpr int MAIN_MENU_OTHER_IDX = 2;
-static constexpr int MAIN_MENU_OTHER_ICON_GAP = 4;
 
-static void drawMainMenuOtherTripleIcons(int cx, int cy, uint16_t iconColor) {
-    const int tripleW = 16 * 3 + MAIN_MENU_OTHER_ICON_GAP * 2;
-    int ix = cx + (CARD_W - tripleW) / 2;
-    const int iy = cy + 12;
-    tft.drawBitmap(ix, iy, bitmap_icon_led, 16, 16, iconColor);
-    tft.drawBitmap(ix + 16 + MAIN_MENU_OTHER_ICON_GAP, iy, bitmap_icon_satellite, 16, 16, iconColor);
-    tft.drawBitmap(ix + 32 + MAIN_MENU_OTHER_ICON_GAP * 2, iy, bitmap_icon_down_dots, 16, 16, iconColor);
+static const char* const kMenuSubTags[NUM_MENU_ITEMS] = {
+    "11 TOOLS",      // WiFi
+    "9 ARSENAL",     // 2.4GHz
+    "AUX SENSORS",   // More
+    "CONFIG",        // Settings
+    "9 TOOLS",       // Bluetooth
+    "7 TRANSCEIV",   // SubGHz
+    "10 UTILITY",    // Tools
+    "v3.0 PRO"       // About
+};
+
+static const char* const kMenuDescriptions[NUM_MENU_ITEMS] = {
+    "DEAUTH * EVIL TWIN * KARMA * WPS",
+    "NRF24 ANALYZER * JAMMER * KILL",
+    "IR REMOTE * PN532 NFC * GPS",
+    "HARDWARE CONFIG * THEME * POWER",
+    "BLE SPOOFER * AIRTAG * SNIFFER",
+    "CC1101 REPLAY * FFT WATERFALL",
+    "DUCKYSCRIPT * WEB CYBERDECK",
+    "ESP32-R3X v3.0 LITTLE-SUFI SIGN"
+};
+
+static void drawMenuTopHeader() {
+    tft.fillRect(0, 20, 240, 18, 0x0124);
+    tft.drawFastHLine(0, 20, 240, CYBER_CYAN);
+    tft.drawFastHLine(0, 38, 240, CYBER_ORANGE);
+
+    // V3.0 badge
+    tft.fillRect(4, 22, 54, 14, 0x0842);
+    tft.drawRect(4, 22, 54, 14, CYBER_ORANGE);
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.setTextColor(CYBER_ORANGE, 0x0842);
+    tft.setCursor(7, 25);
+    tft.print("R3X v3.0");
+
+    // Suite title
+    tft.setTextColor(TFT_WHITE, 0x0124);
+    tft.setCursor(64, 25);
+    tft.print("CYBERDECK S3");
+
+    // Live status indicator
+    tft.fillRect(182, 23, 54, 12, 0x028A);
+    tft.drawRect(182, 23, 54, 12, TFT_GREEN);
+    tft.setTextColor(TFT_GREEN, 0x028A);
+    tft.setCursor(187, 25);
+    tft.print("ONLINE");
+}
+
+static void drawMenuBottomTicker(int selIdx) {
+    tft.fillRect(0, 281, 240, 39, 0x0821);
+    tft.drawFastHLine(0, 281, 240, CYBER_ORANGE);
+    tft.drawFastHLine(0, 282, 240, 0x10A2);
+    tft.drawFastHLine(0, 319, 240, CYBER_CYAN);
+
+    tft.setTextFont(1);
+    tft.setTextSize(1);
+    tft.setTextColor(CYBER_ORANGE, 0x0821);
+    tft.setCursor(6, 286);
+    tft.print("SYS > ");
+    tft.setTextColor(CYBER_CYAN, 0x0821);
+    if (selIdx >= 0 && selIdx < NUM_MENU_ITEMS) {
+        tft.print(kMenuDescriptions[selIdx]);
+    }
+
+    tft.setTextColor(TFT_GREEN, 0x0821);
+    tft.setCursor(6, 303);
+    tft.print("[ENTER] EXECUTE  [TOUCH] DIRECT LAUNCH");
+}
+
+static void drawTacticalCard(int i, bool selected) {
+    int col = i / 4;
+    int row = i % 4;
+    int cx = CARD_PADX + col * (CARD_W + CARD_GAP_X);
+    int cy = CARD_PADY + row * (CARD_H + CARD_GAP_Y);
+    uint16_t accent = ACCENT_CLR[i];
+
+    if (selected) {
+        // High-tech glowing active body
+        tft.fillRoundRect(cx, cy, CARD_W, CARD_H, 4, 0x0228);
+        tft.drawRoundRect(cx, cy, CARD_W, CARD_H, 4, CYBER_ORANGE);
+        tft.drawRoundRect(cx + 1, cy + 1, CARD_W - 2, CARD_H - 2, 4, CYBER_CYAN);
+
+        // Top accent line
+        tft.drawFastHLine(cx + 4, cy + 2, CARD_W - 8, CYBER_ORANGE);
+
+        // Corner crosshairs
+        tft.drawFastHLine(cx - 1, cy - 1, 5, CYBER_ORANGE);
+        tft.drawFastVLine(cx - 1, cy - 1, 5, CYBER_ORANGE);
+        tft.drawFastHLine(cx + CARD_W - 4, cy - 1, 5, CYBER_ORANGE);
+        tft.drawFastVLine(cx + CARD_W, cy - 1, 5, CYBER_ORANGE);
+
+        // Dedicated Icon badge box
+        tft.fillRoundRect(cx + 4, cy + 10, 20, 20, 3, 0x0842);
+        tft.drawRoundRect(cx + 4, cy + 10, 20, 20, 3, CYBER_ORANGE);
+        if (bitmap_icons[i]) {
+            tft.drawBitmap(cx + 6, cy + 12, bitmap_icons[i], 16, 16, CYBER_ORANGE);
+        }
+
+        // Active selector arrow
+        tft.setTextColor(CYBER_ORANGE, 0x0228);
+        tft.setTextFont(1);
+        tft.setCursor(cx + 26, cy + 14);
+        tft.print(">");
+
+        // Title
+        tft.setTextColor(TFT_WHITE, 0x0228);
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setCursor(cx + 34, cy + 12);
+        tft.print(menu_items[i]);
+
+        // Sub-tag micro-pill
+        tft.fillRoundRect(cx + 6, cy + 36, 60, 14, 2, 0x0842);
+        tft.drawRoundRect(cx + 6, cy + 36, 60, 14, 2, CYBER_CYAN);
+        tft.setTextFont(1);
+        tft.setTextColor(CYBER_CYAN, 0x0842);
+        tft.setCursor(cx + 9, cy + 39);
+        tft.print(kMenuSubTags[i]);
+
+        // Right side index badge
+        tft.setTextColor(CYBER_ORANGE, 0x0228);
+        tft.setCursor(cx + CARD_W - 24, cy + 39);
+        tft.printf("#%02d", i + 1);
+
+    } else {
+        // Unselected high-contrast slate body
+        tft.fillRoundRect(cx, cy, CARD_W, CARD_H, 4, 0x10A2);
+        tft.drawRoundRect(cx, cy, CARD_W, CARD_H, 4, 0x2965);
+
+        // Top accent line in category color
+        tft.fillRect(cx + 4, cy + 1, CARD_W - 8, 2, accent);
+
+        // Corner tech bracket
+        tft.drawFastHLine(cx + 1, cy + 1, 4, accent);
+        tft.drawFastVLine(cx + 1, cy + 1, 4, accent);
+
+        // Dedicated Icon badge box
+        tft.fillRoundRect(cx + 4, cy + 10, 20, 20, 3, 0x0821);
+        tft.drawRoundRect(cx + 4, cy + 10, 20, 20, 3, accent);
+        if (bitmap_icons[i]) {
+            tft.drawBitmap(cx + 6, cy + 12, bitmap_icons[i], 16, 16, accent);
+        }
+
+        // Title
+        tft.setTextColor(0xFFFF, 0x10A2);
+        tft.setTextFont(2);
+        tft.setTextSize(1);
+        tft.setCursor(cx + 28, cy + 12);
+        tft.print(menu_items[i]);
+
+        // Sub-tag micro-pill
+        tft.fillRoundRect(cx + 6, cy + 36, 60, 14, 2, 0x0821);
+        tft.drawRoundRect(cx + 6, cy + 36, 60, 14, 2, 0x31A6);
+        tft.setTextFont(1);
+        tft.setTextColor(accent, 0x0821);
+        tft.setCursor(cx + 9, cy + 39);
+        tft.print(kMenuSubTags[i]);
+
+        // Right side index badge
+        tft.setTextColor(0x7BEF, 0x10A2);
+        tft.setCursor(cx + CARD_W - 24, cy + 39);
+        tft.printf("#%02d", i + 1);
+    }
 }
 
 void displayMenu() {
@@ -1123,119 +1378,29 @@ void displayMenu() {
     for (int x = 0; x < 240; x += 40) tft.drawFastVLine(x, 0, 320, 0x0821);
     for (int y = 0; y < 320; y += 40) tft.drawFastHLine(0, y, 240, 0x0821);
 
+    drawMenuTopHeader();
+
     for (int i = 0; i < NUM_MENU_ITEMS; i++) {
-      int col = i / 4;
-      int row = i % 4;
-      int cx = CARD_PADX + col * (CARD_W + CARD_GAP);
-      int cy = CARD_PADY + row * (CARD_H + CARD_GAP);
-      uint16_t accent = ACCENT_CLR[i];
-
-      // Tactical Card Body
-      tft.fillRect(cx, cy, CARD_W, CARD_H, 0x0000);
-      tft.drawRect(cx, cy, CARD_W, CARD_H, 0x2104);
-
-      // Corner Brackets
-      tft.drawFastHLine(cx, cy, 6, accent);
-      tft.drawFastVLine(cx, cy, 6, accent);
-
-      // Sub-label (0x00 .. 0x07)
-      tft.setTextFont(1);
-      tft.setTextColor(0x4208);
-      tft.setCursor(cx + 6, cy + CARD_H - 12);
-      tft.print("0x0" + String(i, HEX));
-
-      // Icon
-      if (i == MAIN_MENU_OTHER_IDX) {
-        drawMainMenuOtherTripleIcons(cx, cy, 0x8410);
-      } else {
-        tft.drawBitmap(cx + (CARD_W - 16) / 2, cy + 12, bitmap_icons[i], 16, 16, 0x8410);
-      }
-
-      // Card Label
-      tft.setTextColor(0xC618);
-      tft.setTextFont(2);
-      tft.setTextSize(1);
-      int tw = strlen(menu_items[i]) * 7;
-      tft.setCursor(cx + (CARD_W - tw) / 2, cy + 34);
-      tft.print(menu_items[i]);
+      drawTacticalCard(i, i == current_menu_index);
     }
+
+    drawMenuBottomTicker(current_menu_index);
+
     menu_initialized = true;
-    last_menu_index = -1;
+    last_menu_index = current_menu_index;
   }
 
   if (last_menu_index != current_menu_index) {
     if (last_menu_index >= 0 && last_menu_index < NUM_MENU_ITEMS) {
-      int pi = last_menu_index;
-      int pc = pi / 4;
-      int pr = pi % 4;
-      int px = CARD_PADX + pc * (CARD_W + CARD_GAP);
-      int py = CARD_PADY + pr * (CARD_H + CARD_GAP);
-      uint16_t pa = ACCENT_CLR[pi];
-
-      // Reset Tactical Card to unselected state
-      tft.drawRect(px, py, CARD_W, CARD_H, 0x2104);
-      tft.drawRect(px + 1, py + 1, CARD_W - 2, CARD_H - 2, 0x0000);
-
-      // Clear crosshair corners
-      tft.drawFastHLine(px - 2, py - 2, 6, 0x0821);
-      tft.drawFastVLine(px - 2, py - 2, 6, 0x0821);
-      tft.drawFastHLine(px + CARD_W - 4, py - 2, 6, 0x0821);
-      tft.drawFastVLine(px + CARD_W + 1, py - 2, 6, 0x0821);
-
-      // Redraw corner bracket
-      tft.drawFastHLine(px, py, 6, pa);
-      tft.drawFastVLine(px, py, 6, pa);
-
-      // Redraw unselected icon
-      if (pi == MAIN_MENU_OTHER_IDX) {
-        drawMainMenuOtherTripleIcons(px, py, 0x8410);
-      } else {
-        tft.drawBitmap(px + (CARD_W - 16) / 2, py + 12, bitmap_icons[pi], 16, 16, 0x8410);
-      }
-
-      // Redraw unselected label
-      tft.setTextColor(0xC618, 0x0000);
-      tft.setTextFont(2);
-      tft.setTextSize(1);
-      int tw = strlen(menu_items[pi]) * 7;
-      tft.setCursor(px + (CARD_W - tw) / 2, py + 34);
-      tft.print(menu_items[pi]);
+      drawTacticalCard(last_menu_index, false);
     }
 
-    int ci = current_menu_index;
-    int cc = ci / 4;
-    int cr = ci % 4;
-    int cx2 = CARD_PADX + cc * (CARD_W + CARD_GAP);
-    int cy2 = CARD_PADY + cr * (CARD_H + CARD_GAP);
-    uint16_t ca = ACCENT_CLR[ci];
-
-    // Tactical Selection Highlight (Double border)
-    tft.drawRect(cx2, cy2, CARD_W, CARD_H, ca);
-    tft.drawRect(cx2 + 1, cy2 + 1, CARD_W - 2, CARD_H - 2, ca);
-
-    // Crosshair corners
-    tft.drawFastHLine(cx2 - 2, cy2 - 2, 6, ca);
-    tft.drawFastVLine(cx2 - 2, cy2 - 2, 6, ca);
-    tft.drawFastHLine(cx2 + CARD_W - 4, cy2 - 2, 6, ca);
-    tft.drawFastVLine(cx2 + CARD_W + 1, cy2 - 2, 6, ca);
-
-    // Selected Icon in Orange
-    if (ci == MAIN_MENU_OTHER_IDX) {
-      drawMainMenuOtherTripleIcons(cx2, cy2, CYBER_ORANGE);
-    } else {
-      tft.drawBitmap(cx2 + (CARD_W - 16) / 2, cy2 + 12, bitmap_icons[ci], 16, 16, CYBER_ORANGE);
-    }
-
-    // Selected Label in accent color
-    tft.setTextColor(ca, 0x0000);
-    tft.setTextFont(2);
-    tft.setTextSize(1);
-    int tw2 = strlen(menu_items[ci]) * 7;
-    tft.setCursor(cx2 + (CARD_W - tw2) / 2, cy2 + 34);
-    tft.print(menu_items[ci]);
+    drawTacticalCard(current_menu_index, true);
+    drawMenuBottomTicker(current_menu_index);
 
     last_menu_index = current_menu_index;
   }
+
   drawStatusBar(currentBatteryVoltage, true);
 }
 
@@ -1493,7 +1658,7 @@ void handleWiFiSubmenuButtons() {
                 current_submenu_index = 6;
                 in_sub_menu = true;
                 CaptivePortal::cportalLoop();
-                if (isButtonPressed(BTN_SELECT)) {
+                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) {
                     in_sub_menu = true;
                     is_main_menu = false;
                     submenu_initialized = false;
@@ -2705,6 +2870,27 @@ void handleBluetoothSubmenuButtons() {
     }
 }
 
+static void runNRFFeature(int idx, void (*setupFn)(), void (*loopFn)(), void (*exitFn)() = nullptr) {
+    if (!setupFn || !loopFn) return;
+    setupFn();
+    while (current_submenu_index == idx && !feature_exit_requested) {
+        current_submenu_index = idx;
+        in_sub_menu = true;
+        serialAutomationPoll();
+        loopFn();
+        if (featureExitButtonPressed() || isSerialExitRequested() || isButtonPressed(BTN_SELECT) || feature_exit_requested) {
+            feature_exit_requested = true;
+            serialAutomationClearExit();
+            break;
+        }
+        delay(5);
+        yield();
+    }
+    if (exitFn) {
+        exitFn();
+    }
+}
+
 static void launchNRFFeature(int idx) {
     if (idx == 8) { // Back to Main Menu
         in_sub_menu = false;
@@ -2721,84 +2907,14 @@ static void launchNRFFeature(int idx) {
     feature_exit_requested = false;
 
     switch (idx) {
-        case 0:
-            Scanner::scannerSetup();
-            while (current_submenu_index == 0 && !feature_exit_requested) {
-                current_submenu_index = 0;
-                in_sub_menu = true;
-                Scanner::scannerLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            Scanner::exit();
-            break;
-        case 1:
-            NrfAnalyzer::setup();
-            while (current_submenu_index == 1 && !feature_exit_requested) {
-                current_submenu_index = 1;
-                in_sub_menu = true;
-                NrfAnalyzer::loop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            break;
-        case 2:
-            NrfJammer::setup();
-            while (current_submenu_index == 2 && !feature_exit_requested) {
-                current_submenu_index = 2;
-                in_sub_menu = true;
-                NrfJammer::loop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            break;
-        case 3:
-            ProtoKill::prokillSetup();
-            while (current_submenu_index == 3 && !feature_exit_requested) {
-                current_submenu_index = 3;
-                in_sub_menu = true;
-                ProtoKill::prokillLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            ProtoKill::exit();
-            break;
-        case 4:
-            EsbSniffer::esbSnifferSetup();
-            while (current_submenu_index == 4 && !feature_exit_requested) {
-                current_submenu_index = 4;
-                in_sub_menu = true;
-                EsbSniffer::esbSnifferLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            EsbSniffer::exit();
-            break;
-        case 5:
-            EsbReplay::esbReplaySetup();
-            while (current_submenu_index == 5 && !feature_exit_requested) {
-                current_submenu_index = 5;
-                in_sub_menu = true;
-                EsbReplay::esbReplayLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            EsbReplay::exit();
-            break;
-        case 6:
-            MouseJack::mouseJackSetup();
-            while (current_submenu_index == 6 && !feature_exit_requested) {
-                current_submenu_index = 6;
-                in_sub_menu = true;
-                MouseJack::mouseJackLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            MouseJack::exit();
-            break;
-        case 7:
-            MouseJackInject::mouseJackInjectSetup();
-            while (current_submenu_index == 7 && !feature_exit_requested) {
-                current_submenu_index = 7;
-                in_sub_menu = true;
-                MouseJackInject::mouseJackInjectLoop();
-                if (isButtonPressed(BTN_SELECT) || featureExitButtonPressed()) break;
-            }
-            MouseJackInject::exit();
-            break;
+        case 0: runNRFFeature(idx, Scanner::scannerSetup, Scanner::scannerLoop, Scanner::exit); break;
+        case 1: runNRFFeature(idx, NrfAnalyzer::setup, NrfAnalyzer::loop); break;
+        case 2: runNRFFeature(idx, NrfJammer::setup, NrfJammer::loop); break;
+        case 3: runNRFFeature(idx, ProtoKill::prokillSetup, ProtoKill::prokillLoop, ProtoKill::exit); break;
+        case 4: runNRFFeature(idx, EsbSniffer::esbSnifferSetup, EsbSniffer::esbSnifferLoop, EsbSniffer::exit); break;
+        case 5: runNRFFeature(idx, EsbReplay::esbReplaySetup, EsbReplay::esbReplayLoop, EsbReplay::exit); break;
+        case 6: runNRFFeature(idx, MouseJack::mouseJackSetup, MouseJack::mouseJackLoop, MouseJack::exit); break;
+        case 7: runNRFFeature(idx, MouseJackInject::mouseJackInjectSetup, MouseJackInject::mouseJackInjectLoop, MouseJackInject::exit); break;
     }
 
     in_sub_menu = true;
@@ -2850,7 +2966,7 @@ void handleNRFSubmenuButtons() {
 }
 
 static void launchSubGHzFeature(int idx) {
-    if (idx == 5) {
+    if (idx == 7) {
         in_sub_menu = false;
         feature_active = false;
         feature_exit_requested = false;
@@ -2875,6 +2991,8 @@ static void launchSubGHzFeature(int idx) {
         case 2: setupFn = SubBrute::subBruteSetup; loopFn = SubBrute::subBruteLoop; break;
         case 3: setupFn = jammingdetector::Setup; loopFn = jammingdetector::Loop; break;
         case 4: setupFn = SavedProfile::saveSetup; loopFn = SavedProfile::saveLoop; break;
+        case 5: setupFn = SubGHz::fftWaterfallSetup; loopFn = SubGHz::fftWaterfallLoop; break;
+        case 6: setupFn = SubGHz::tpmsDecoderSetup; loopFn = SubGHz::tpmsDecoderLoop; break;
         default: break;
     }
 
@@ -2883,13 +3001,15 @@ static void launchSubGHzFeature(int idx) {
     setupFn();
     while (current_submenu_index == idx && !feature_exit_requested) {
         current_submenu_index = idx;
-        in_sub_menu = true;
+        serialAutomationPoll();
         loopFn();
-        if (featureExitButtonPressed() || isSerialExitRequested()) {
+        if (featureExitButtonPressed() || isSerialExitRequested() || feature_exit_requested) {
             feature_exit_requested = true;
+            serialAutomationClearExit();
             break;
         }
         delay(5);
+        yield();
     }
 
     feature_active = false;
@@ -2961,10 +3081,14 @@ constexpr int TOOLS_IDX_TOUCH    = 2;
 constexpr int TOOLS_IDX_HW_INFO  = 3;
 constexpr int TOOLS_IDX_SD_FILES = 4;
 constexpr int TOOLS_IDX_GPIO     = 5;
+constexpr int TOOLS_IDX_DUCKY    = 6;
+constexpr int TOOLS_IDX_CYBER    = 7;
+constexpr int TOOLS_IDX_THEME    = 8;
+constexpr int TOOLS_IDX_BACK     = 9;
 constexpr int TOOLS_IDX_SETTINGS = -1;
-constexpr int TOOLS_IDX_BACK     = 6;
 
 static void runToolsFeatureExitCleanup() {
+    V3Tools::cyberdeckCleanup();
     in_sub_menu = true;
     is_main_menu = false;
     submenu_initialized = false;
@@ -3509,14 +3633,18 @@ static void runToolsFeature(int idx, void (*setupFn)(), void (*loopFn)()) {
     setupFn();
     while (current_submenu_index == idx && !feature_exit_requested) {
         current_submenu_index = idx;
-        in_sub_menu = true;
+        serialAutomationPoll();
         loopFn();
-        if (feature_exit_requested) {
+        if (featureExitButtonPressed() || isSerialExitRequested() || feature_exit_requested) {
+            feature_exit_requested = true;
+            serialAutomationClearExit();
             break;
         }
         if (!useTouchNav && isButtonPressed(BTN_SELECT)) {
             break;
         }
+        delay(5);
+        yield();
     }
     runToolsFeatureExitCleanup();
 }
@@ -3540,6 +3668,15 @@ static void launchToolsFeature(int idx) {
             break;
         case TOOLS_IDX_GPIO:
             runToolsFeature(idx, GpioDashboard::setup, GpioDashboard::loop);
+            break;
+        case TOOLS_IDX_DUCKY:
+            runToolsFeature(idx, V3Tools::duckySetup, V3Tools::duckyLoop);
+            break;
+        case TOOLS_IDX_CYBER:
+            runToolsFeature(idx, V3Tools::cyberdeckSetup, V3Tools::cyberdeckLoop);
+            break;
+        case TOOLS_IDX_THEME:
+            runToolsFeature(idx, V3Tools::themeEngineSetup, V3Tools::themeEngineLoop);
             break;
         default:
             break;
@@ -3847,6 +3984,14 @@ void handleOtherSubmenuButtons() {
                 updateActiveSubmenu();
                 submenu_initialized = false;
                 displaySubmenu();
+            } else if (current_submenu_index == 3) {
+                other_layer = OTHER_LAYER_AUTO;
+                other_menu_grid_initialized = false;
+                last_other_menu_index = -1;
+                current_submenu_index = 0;
+                updateActiveSubmenu();
+                submenu_initialized = false;
+                displaySubmenu();
             }
         } else if (other_layer == OTHER_LAYER_IR) {
             if (current_submenu_index == ir_NUM_SUBMENU_ITEMS - 1) {
@@ -3982,6 +4127,26 @@ void handleOtherSubmenuButtons() {
                 is_main_menu = false;
             } else {
                 otherGpsPlaceholderAction(current_submenu_index);
+            }
+        } else if (other_layer == OTHER_LAYER_AUTO) {
+            if (current_submenu_index == auto_NUM_SUBMENU_ITEMS - 1) {
+                other_layer = OTHER_LAYER_HOME;
+                other_menu_grid_initialized = false;
+                last_other_menu_index = -1;
+                current_submenu_index = 0;
+                updateActiveSubmenu();
+                submenu_initialized = false;
+                displaySubmenu();
+                is_main_menu = false;
+            } else {
+                if (current_submenu_index == 0) {
+                    Automotive::sessionSniffer();
+                } else if (current_submenu_index == 1) {
+                    Automotive::sessionFuzzer();
+                }
+                submenu_initialized = false;
+                displaySubmenu();
+                delay(200);
             }
         }
     }
@@ -4064,6 +4229,14 @@ void handleOtherSubmenuButtons() {
                 updateActiveSubmenu();
                 submenu_initialized = false;
                 displaySubmenu();
+            } else if (current_submenu_index == 3) {
+                other_layer = OTHER_LAYER_AUTO;
+                other_menu_grid_initialized = false;
+                last_other_menu_index = -1;
+                current_submenu_index = 0;
+                updateActiveSubmenu();
+                submenu_initialized = false;
+                displaySubmenu();
             }
         } else if (other_layer == OTHER_LAYER_IR) {
             if (current_submenu_index == ir_NUM_SUBMENU_ITEMS - 1) {
@@ -4200,6 +4373,26 @@ void handleOtherSubmenuButtons() {
             } else {
                 otherGpsPlaceholderAction(current_submenu_index);
             }
+        } else if (other_layer == OTHER_LAYER_AUTO) {
+            if (current_submenu_index == auto_NUM_SUBMENU_ITEMS - 1) {
+                other_layer = OTHER_LAYER_HOME;
+                other_menu_grid_initialized = false;
+                last_other_menu_index = -1;
+                current_submenu_index = 0;
+                updateActiveSubmenu();
+                submenu_initialized = false;
+                displaySubmenu();
+                is_main_menu = false;
+            } else {
+                if (current_submenu_index == 0) {
+                    Automotive::sessionSniffer();
+                } else if (current_submenu_index == 1) {
+                    Automotive::sessionFuzzer();
+                }
+                submenu_initialized = false;
+                displaySubmenu();
+                delay(200);
+            }
         }
     }
 }
@@ -4217,18 +4410,20 @@ void handleAboutPage() {
 
   // Logo / Title
   tft.setTextFont(2);
-  tft.setTextColor(UI_ICON, UI_BG);
-  tft.setCursor(16, 40);
+  tft.setTextColor(CYBER_ORANGE, UI_BG);
+  tft.setCursor(16, 38);
   tftPrintObf(OBF_PN, sizeof(OBF_PN)); // ESP32-R3X
+  tft.setTextColor(CYBER_CYAN, UI_BG);
+  tft.print(" v3.0.0 PRO");
 
   // Subtitle
   tft.setTextFont(1);
-  tft.setTextColor(UI_DIM_TEXT, UI_BG);
-  tft.setCursor(16, 60);
+  tft.setTextColor(TFT_WHITE, UI_BG);
+  tft.setCursor(16, 58);
   tft.print("by ");
   tftPrintObf(OBF_DN, sizeof(OBF_DN));
-  tft.print(" - ");
-  tft.print(ESP32DIV_VERSION);
+  tft.setTextColor(GREEN, UI_BG);
+  tft.print(" - Tactical RF Cyberdeck");
 
   tft.drawFastHLine(12, 78, 216, UI_LINE);
 
@@ -4318,7 +4513,15 @@ void handleSettingsSubmenuButtons() {
 
   AppSettingsUI::setup();
   while (!feature_exit_requested) {
+    serialAutomationPoll();
     AppSettingsUI::loop();
+    if (featureExitButtonPressed() || isSerialExitRequested() || isButtonPressed(BTN_SELECT) || feature_exit_requested) {
+      feature_exit_requested = true;
+      serialAutomationClearExit();
+      break;
+    }
+    delay(5);
+    yield();
   }
 
   feature_active = false;
@@ -4348,7 +4551,7 @@ void handleButtons() {
         }
     } else {
 
-        if (isButtonPressed(BTN_UP) && !is_main_menu) {
+        if (isButtonPressed(BTN_UP)) {
             current_menu_index--;
             if (current_menu_index < 0) {
                 current_menu_index = NUM_MENU_ITEMS - 1;
@@ -4358,7 +4561,7 @@ void handleButtons() {
             delay(200);
         }
 
-        if (isButtonPressed(BTN_DOWN) && !is_main_menu) {
+        if (isButtonPressed(BTN_DOWN)) {
             current_menu_index++;
             if (current_menu_index >= NUM_MENU_ITEMS) {
                 current_menu_index = 0;
@@ -4368,7 +4571,7 @@ void handleButtons() {
             delay(200);
         }
 
-        if (isButtonPressed(BTN_LEFT) && !is_main_menu) {
+        if (isButtonPressed(BTN_LEFT)) {
             int row = current_menu_index % 4;
             if (current_menu_index >= 4) {
                 current_menu_index = row;
@@ -4382,7 +4585,7 @@ void handleButtons() {
             delay(200);
         }
 
-        if (isButtonPressed(BTN_RIGHT) && !is_main_menu) {
+        if (isButtonPressed(BTN_RIGHT)) {
             int row = current_menu_index % 4;
             if (current_menu_index < 4) {
                 current_menu_index = row + 4;
@@ -4418,13 +4621,6 @@ void handleButtons() {
                     submenu_initialized = false;
                     displaySubmenu();
                 }
-
-                if (is_main_menu) {
-                    is_main_menu = false;
-                    displayMenu();
-                } else {
-                    is_main_menu = true;
-                }
             }
         }
 
@@ -4437,8 +4633,8 @@ void handleButtons() {
             for (int i = 0; i < NUM_MENU_ITEMS; i++) {
                 int col = i / 4;
                 int row = i % 4;
-                int bx1 = CARD_PADX + col * (CARD_W + CARD_GAP);
-                int by1 = CARD_PADY + row * (CARD_H + CARD_GAP);
+                int bx1 = CARD_PADX + col * (CARD_W + CARD_GAP_X);
+                int by1 = CARD_PADY + row * (CARD_H + CARD_GAP_Y);
                 int bx2 = bx1 + CARD_W;
                 int by2 = by1 + CARD_H;
 
@@ -4465,12 +4661,7 @@ void handleButtons() {
                             submenu_initialized = false;
                             displaySubmenu();
                         } else {
-                            if (is_main_menu) {
-                                is_main_menu = false;
-                                displayMenu();
-                            } else {
-                                is_main_menu = true;
-                            }
+                            displayMenu();
                         }
                     }
                     delay(150);
@@ -4482,16 +4673,13 @@ void handleButtons() {
 }
 
 void setup() {
+  esp_brownout_disable();
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   Serial.begin(115200);
-  Serial0.begin(115200);
   delay(50);
   serialAutomationInit();
-  cliPrintln("[boot] 1. start - ESP32-R3X V2.0");
-
-#if !BOARD_HAS_ESP32S3
-  // Weak USB / backlight load can brownout classic ESP32 during intro.
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
-#endif
+  cliPrintln("[boot] 1. start - ESP32-R3X V3.0");
 
   pinMode(17, OUTPUT);
   digitalWrite(17, HIGH);
@@ -4502,6 +4690,9 @@ void setup() {
   tft.setRotation(TFT_ROTATION);
   tft.fillScreen(TFT_BLACK);
   cliPrintln("[boot] 2. tft initialized & screen cleared");
+  Automotive::setup();
+  FuelGauge::init();
+  Haptic::init();
 
   setupTouchscreen();
   cliPrintln("[boot] 2a. touch initialized");
@@ -4582,6 +4773,10 @@ void setup() {
       feature_exit_requested = true;
       delay(100);
     }
+    if (mIdx < 0 || mIdx >= NUM_MENU_ITEMS) {
+      cliPrintf("[LAUNCH] Error: Invalid menu index %d\n", mIdx);
+      return;
+    }
     current_menu_index = mIdx;
     is_main_menu = false;
     in_sub_menu = true;
@@ -4600,6 +4795,7 @@ void setup() {
 }
 
 void loop() {
+  Automotive::loop();
   serialAutomationPoll();
   applyThemeToPalette(settings().theme);
   handleButtons();

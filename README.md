@@ -266,3 +266,6 @@ Copyright (c) 2026 **Little-Sufi**.
 <p align="center">
   <b>Developed with passion by Little-Sufi ⚡ ESP32-R3X</b>
 </p>
+
+## ?? Installation
+For full installation instructions, including how to flash the pre-compiled V3.0 .bin files, please see the **[Installation Guide (INSTALL.md)](INSTALL.md)**.

@@ -11,6 +11,7 @@
 #include "icon.h"
 #include "utils.h"
 #include "shared.h"
+#include "SerialAutomation.h"
 
 #ifndef RFID_UID_CLONE
 #define RFID_UID_CLONE 1

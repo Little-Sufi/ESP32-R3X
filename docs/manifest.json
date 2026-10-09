@@ -1,12 +1,12 @@
 {
-  "name": "ESP32-R3X v2.0",
-  "version": "2.0.0",
+  "name": "ESP32-R3X v3.0",
+  "version": "3.0.0",
   "new_install_prompt_erase": true,
   "builds": [
     {
       "chipFamily": "ESP32-S3",
       "parts": [
-        { "path": "firmware/ESP32-R3X-v2.0-merged.bin", "offset": 0 }
+        { "path": "firmware/ESP32-R3X-v3.0-merged.bin", "offset": 0 }
       ]
     }
   ]

@@ -14,6 +14,7 @@ const uint16_t GRAY = 0x8410, BLUE = 0x001F, RED = 0xF800,
 #define CYBER_NAVY     0x0002  // #000010
 #define CYBER_GREEN    0x07E0  // #00FF00
 #define CYBER_RED      0xF800  // #FF0000
+#define CYBER_MAGENTA  0xF81F  // #FF00FF
 
 uint16_t uiUniversalColor();
 #define ORANGE CYBER_ORANGE
@@ -90,8 +91,8 @@ uint16_t uiUniversalColor();
 #define ESP32R3X_NAME "ESP32-R3X"
 #endif
 #ifndef ESP32DIV_VERSION
-#define ESP32DIV_VERSION "v2.0.0"
-#define ESP32R3X_VERSION "v2.0.0"
+#define ESP32DIV_VERSION "V3.0"
+#define ESP32R3X_VERSION "V3.0"
 #endif
 
 

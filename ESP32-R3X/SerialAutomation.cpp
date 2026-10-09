@@ -32,12 +32,10 @@ static portMUX_TYPE s_cliMux = portMUX_INITIALIZER_UNLOCKED;
 
 void cliPrint(const String& s) {
   Serial.print(s);
-  Serial0.print(s);
 }
 
 void cliPrintln(const String& s) {
   Serial.println(s);
-  Serial0.println(s);
 }
 
 void cliPrintf(const char* format, ...) {
@@ -47,7 +45,6 @@ void cliPrintf(const char* format, ...) {
   vsnprintf(buf, sizeof(buf), format, args);
   va_end(args);
   Serial.print(buf);
-  Serial0.print(buf);
 }
 
 
@@ -67,9 +64,9 @@ void serialAutomationRequestExit() {
   portENTER_CRITICAL(&s_cliMux);
   s_serialExit = true;
   feature_exit_requested = true;
-  s_virtualButtonPin = BTN_SELECT;
-  s_virtualButtonExpiry = millis() + 350;
-  s_virtualButtonEdge = true;
+  s_virtualButtonPin = -1;
+  s_virtualButtonExpiry = 0;
+  s_virtualButtonEdge = false;
   portEXIT_CRITICAL(&s_cliMux);
 }
 
@@ -409,14 +406,9 @@ static void handleCliCommand(String cmd) {
   }
 }
 
-static bool s_isPolling = false;
-
 void serialAutomationPoll() {
-  if (s_isPolling) return;
-  s_isPolling = true;
-
-  while (Serial.available() || Serial0.available()) {
-    char c = Serial.available() ? (char)Serial.read() : (char)Serial0.read();
+  while (Serial.available()) {
+    char c = (char)Serial.read();
     if (c == '\r') continue;
     if (c == '\n') {
       if (s_rxLine.length() > 0) {
@@ -430,19 +422,9 @@ void serialAutomationPoll() {
       }
     }
   }
-
-  s_isPolling = false;
-}
-
-static void serialAutomationTask(void* pvParameters) {
-  while (true) {
-    serialAutomationPoll();
-    vTaskDelay(pdMS_TO_TICKS(15));
-  }
 }
 
 void serialAutomationInit() {
   s_rxLine.reserve(128);
-  xTaskCreatePinnedToCore(serialAutomationTask, "serial_cli", 4096, NULL, 1, NULL, tskNO_AFFINITY);
   cliPrintln("[CLI] Serial Automation CLI active on COM port");
 }
