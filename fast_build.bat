@@ -34,3 +34,6 @@ echo =======================================================
 echo Cache Statistics:
 "C:\Users\assua\AppData\Local\Arduino15\ccache\ccache.exe" -s
 echo =======================================================
+echo.
+echo Press any key to close...
+pause >nul
