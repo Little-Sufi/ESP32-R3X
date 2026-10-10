@@ -127,6 +127,28 @@ Directional tactile switches decoded via I2C port expander at `0x20` (or `0x38`)
 
 ---
 
+### 9. Automotive CAN Bus (TWAI Subsystem - V3.0)
+High-speed CAN 2.0A/B controller (TWAI) operating at up to 1 Mbps (default 500 kbps) for vehicle bus monitoring, diagnostics, and ECU simulation via external 3.3V CAN transceiver (SN65HVD230 or VP230):
+
+| Signal | Net Name | ESP32-S3 GPIO | Interface | Function / Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **TWAI TX** | `CAN_TX` | **GPIO 43** | ESP32 TWAI TX | Connect to transceiver CTX (TXD) |
+| **TWAI RX** | `CAN_RX` | **GPIO 44** | ESP32 TWAI RX | Connect to transceiver CRX (RXD) |
+| **CANH / CANL**| `CAN_BUS` | **CAN Screw Terminal** | Differential Bus | 120-ohm termination jumper |
+
+---
+
+### 10. Battery Fuel Gauge (MAX17048 I2C)
+I2C ModelGauge coulomb counter providing 12-bit cell voltage and precision State-of-Charge percentage:
+
+| Signal | Net Name | ESP32-S3 GPIO | Interface | Function / Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| **SDA** | `I2C_SDA` | **GPIO 1** | I2C Data | Shares I2C bus with PCF8574 (Address `0x36`) |
+| **SCL** | `I2C_SCL` | **GPIO 2** | I2C Clock | 400kHz Fast Mode |
+| **CELL+ / CELL-**| `BATT_IN` | **Battery JST** | Analog Sense | 1S LiPo (3.0V - 4.2V) |
+
+---
+
 ## 🔍 On-Device Verification
 
 To verify wiring on physical hardware, run the firmware's on-device diagnostics:

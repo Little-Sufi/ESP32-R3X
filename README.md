@@ -147,12 +147,13 @@ Located in [`mobile_app/`](mobile_app/README.md), the **Mobile Companion** is a 
 
 ## ⚡ Flashing & Installation
 
-### Option 1: 1-Click Batch Flasher (Recommended)
-1. Download the release package from the [Releases](https://github.com/Little-Sufi/ESP32-R3X/releases) page.
-2. Unzip and run `flash_r3x.bat` with your COM port:
+### Option 1: 1-Click Batch Flasher (Primary & Recommended)
+1. Download the release package or flasher zip (`ESP32-R3X-Flasher-v3.0.zip` or `ESP32-R3X-Flasher-v2.0.zip`) from the [Releases](https://github.com/Little-Sufi/ESP32-R3X/releases) page.
+2. Unzip and run `flash_r3x.bat` (optionally specifying your COM port, e.g., `flash_r3x.bat COM9`):
    ```cmd
-   flash_r3x.bat COM9
+   flash_r3x.bat
    ```
+   *The flasher automatically detects your active COM port, checks for Python 3, automatically installs `esptool` via pip if missing, and flashes the unified single-image binary directly to offset `0x0`.*
 
 ### Option 2: esptool Command Line
 ```bash

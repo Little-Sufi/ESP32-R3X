@@ -432,9 +432,6 @@ static int pagedNavRowY() {
 }
 
 static const char* pagedPageBtnLabel() {
-    if (current_menu_index == 6) {
-        return (*pagedSubmenuPage() == 0) ? "Scroll Down" : "Scroll Up";
-    }
     return (*pagedSubmenuPage() == 0) ? "Next Page" : "Prev Page";
 }
 
