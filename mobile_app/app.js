@@ -18,10 +18,16 @@
   const BLE_SERIAL_CHAR_UUID    = 0xffe1;
 
   // --- State Store ---
+  let savedProto = localStorage.getItem('r3x_protocol');
+  if (savedProto === 'ble' || !savedProto) {
+    savedProto = 'bridge';
+    localStorage.setItem('r3x_protocol', 'bridge');
+  }
+
   const state = {
     connected: false,
     connecting: false,
-    protocol: localStorage.getItem('r3x_protocol') || 'bridge',
+    protocol: savedProto,
     signinCode: localStorage.getItem('r3x_signin_code') || 'R3X-8F2A',
     autoReconnect: localStorage.getItem('r3x_auto_reconnect') !== 'false',
     hapticEnabled: localStorage.getItem('r3x_haptic') !== 'false',

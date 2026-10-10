@@ -1,5 +1,5 @@
-// ESP32-R3X Mobile Companion Service Worker (Offline Support)
-const CACHE_NAME = 'r3x-mobile-v3.0.0';
+// ESP32-R3X Mobile Companion Service Worker (v3.1.0 Network-First)
+const CACHE_NAME = 'r3x-mobile-v3.1.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -10,10 +10,9 @@ const ASSETS_TO_CACHE = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    }).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
   );
 });
 
@@ -32,20 +31,29 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Never intercept local ESP32 hardware API endpoints or WebSockets
-  if (event.request.url.includes('/api/') || 
-      event.request.url.includes('/status') || 
-      event.request.url.includes('/cmd') || 
-      event.request.url.includes(':80/') || 
-      event.request.url.includes('192.168.4.1')) {
+  const url = event.request.url;
+
+  // Never cache API, hardware telemetry, or live commands
+  if (url.includes('/api/') || 
+      url.includes('/status') || 
+      url.includes('/cmd') || 
+      url.includes('/ping') ||
+      url.includes('192.168.4.1')) {
     return;
   }
 
+  // Network-First for scripts, styles, and HTML
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request).catch(() => {
-        return caches.match('./index.html');
-      });
-    })
+    fetch(event.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+          const clone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(event.request).then((cached) => cached || caches.match('./index.html'));
+      })
   );
 });
