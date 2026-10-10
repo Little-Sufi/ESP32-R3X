@@ -47,6 +47,7 @@
         <a href="#features">Features</a>
         <a href="#hardware">Hardware</a>
         <a href="flasher.html" style="color: #00e5ff; font-weight: 600;"><i class="ti ti-bolt"></i> Web Flasher</a>
+        <a href="app/" style="color: #bc8cff; font-weight: 600;"><i class="ti ti-device-mobile"></i> Mobile App</a>
         <a href="#flash">Embedded Flash</a>
         <a href="#start">Get started</a>
         <a href="#videos">Videos</a>
@@ -78,6 +79,7 @@
           </p>
           <div class="hero__cta">
             <a href="flasher.html" class="btn btn--primary"><i class="ti ti-bolt"></i> Web Flasher (Browser)</a>
+            <a href="app/" class="btn btn--secondary" style="border: 1px solid rgba(188, 140, 255, 0.4); color: #bc8cff;"><i class="ti ti-device-mobile"></i> Mobile Companion</a>
             <a href="#flash" class="btn btn--ghost">Quick Flash Below</a>
             <a href="https://github.com/Little-Sufi/ESP32-R3X" class="btn btn--ghost" target="_blank" rel="noopener">
               <i class="hn hn-github"></i> View source
@@ -270,11 +272,18 @@
           <div class="flasher__action">
             <esp-web-install-button id="install-btn" manifest="manifest_v3.json">
               <button slot="activate" class="btn btn--primary"><i class="hn hn-bolt"></i> Connect & Flash Device</button>
-              <span slot="unsupported"></span>
-              <span slot="not-allowed"></span>
+              <span slot="unsupported" style="color: #ffab00; font-size: 0.9rem; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                <i class="ti ti-alert-triangle"></i> Web Serial requires Google Chrome or Microsoft Edge on desktop.
+              </span>
+              <span slot="not-allowed" style="color: #ffab00; font-size: 0.9rem; font-weight: 600;">
+                <i class="ti ti-alert-circle"></i> Serial port access denied or port is already open.
+              </span>
             </esp-web-install-button>
             <a class="btn btn--ghost" id="dl-btn" href="firmware/ESP32-R3X-v3.0-merged.bin" download="ESP32-R3X-v3.0-merged.bin">
               <i class="hn hn-download"></i> Download .bin
+            </a>
+            <a class="btn btn--secondary" href="flasher.html" style="background: rgba(0, 229, 255, 0.1); border: 1px solid rgba(0, 229, 255, 0.3); color: #00e5ff;">
+              <i class="ti ti-external-link"></i> Fullscreen Flasher
             </a>
           </div>
 

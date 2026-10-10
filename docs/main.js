@@ -50,8 +50,11 @@
 
   function updateInstallVisibility() {
     if (!installBtn) return;
-    const serialOk = "serial" in navigator;
-    installBtn.style.display = serialOk ? "" : "none";
+    installBtn.style.display = "";
+    const browserWarn = document.getElementById("browser-warn");
+    if (browserWarn) {
+      browserWarn.style.display = ("serial" in navigator) ? "none" : "block";
+    }
   }
 
   /* —— Flasher board picker —— */

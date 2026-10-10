@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ESP32-R3X Mobile Companion | Always-On Hardware Sync</title>
+  
+  <!-- SEO & Mobile App Meta -->
+  <meta name="description" content="Official Mobile Companion & Wireless Cyberdeck Remote for ESP32-R3X Hardware Platform. Seamless real-time Bluetooth, WiFi, and Serial synchronization with unique device sign-in.">
+  <meta name="theme-color" content="#060913">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="R3X Companion">
+
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icons/icon.svg">
+  <link rel="stylesheet" href="./app.css">
+</head>
+<body>
+
+  <div class="app-container" id="app-root">
+
+    <!-- Global App Header -->
+    <header class="app-header" id="main-header">
+      <div class="brand-section">
+        <div class="brand-logo-badge" id="btn-brand-logo" title="ESP32-R3X Hardware">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="12,2 22,8 22,16 12,22 2,16 2,8" stroke="#00f0ff" fill="rgba(0,240,255,0.15)" />
+            <circle cx="12" cy="12" r="3" fill="#ff9100" />
+          </svg>
+        </div>
+        <div class="brand-title-wrap">
+          <h1>ESP32-<span>R3X</span></h1>
+          <div class="brand-sub">MOBILE SYNC LINK v3.0</div>
+        </div>
+      </div>
+
+      <div class="header-status-badge" id="header-connection-pill">
+        <span class="status-dot disconnected" id="connection-indicator"></span>
+        <span id="connection-status-text">OFFLINE</span>
+      </div>
+    </header>
+
+    <!-- Sign-In / Device Pairing Banner (Dismissible / Expandable) -->
+    <section class="signin-card" id="signin-section">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        DEVICE SIGN-IN CODE
+      </h2>
+      <p id="signin-desc">
+        Enter your ESP32-R3X unique device code to enable always-on sync the instant your hardware powers on.
+      </p>
+
+      <div class="signin-input-group">
+        <input type="text" id="input-signin-code" class="signin-input" placeholder="R3X-XXXX" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false" value="R3X-8F2A">
+        <button type="button" id="btn-pair-device" class="btn-pair">
+          <span>CONNECT</span>
+        </button>
+      </div>
+
+      <div class="signin-helper-row">
+        <span>Default code printed on OLED/TFT screen</span>
+        <span id="label-saved-status">Auto-Sync: ACTIVE</span>
+      </div>
+
+      <div class="quick-connect-chips" id="connection-protocol-selector">
+        <button type="button" class="chip-btn active" data-protocol="bridge" id="proto-bridge">⚡ PC Bridge</button>
+        <button type="button" class="chip-btn" data-protocol="serial" id="proto-serial">USB Serial (OTG)</button>
+        <button type="button" class="chip-btn" data-protocol="wifi" id="proto-wifi">WiFi / SoftAP</button>
+        <button type="button" class="chip-btn" data-protocol="ble" id="proto-ble">BLE 5.0</button>
+        <button type="button" class="chip-btn" data-protocol="demo" id="proto-demo">Demo Sim</button>
+      </div>
+    </section>
+
+    <!-- MAIN VIEW 1: DASHBOARD & CONTROLLER -->
+    <main class="view-section active" id="view-dashboard">
+
+      <!-- Telemetry Status Grid -->
+      <section class="telemetry-grid" aria-label="System Telemetry">
+        <!-- Battery Card -->
+        <article class="telemetry-card highlight" id="card-battery">
+          <div class="telem-header">
+            <span>BATTERY LEVEL</span>
+            <svg class="telem-icon" viewBox="0 0 24 24" fill="none" stroke="#00e676" stroke-width="2">
+              <rect x="2" y="7" width="16" height="10" rx="2" ry="2"/>
+              <line x1="22" y1="11" x2="22" y2="13"/>
+            </svg>
+          </div>
+          <div class="telem-val" id="val-battery-voltage">4.15<span>V</span></div>
+          <div class="bar-container">
+            <div class="bar-fill" id="bar-battery-fill" style="width: 95%;"></div>
+          </div>
+          <div class="telem-sub" id="val-battery-sub">95% &bull; Stable (LiPo)</div>
+        </article>
+
+        <!-- Memory Card -->
+        <article class="telemetry-card" id="card-memory">
+          <div class="telem-header">
+            <span>FREE HEAP</span>
+            <svg class="telem-icon" viewBox="0 0 24 24" fill="none" stroke="#00f0ff" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <div class="telem-val" id="val-heap-free">133<span>KB</span></div>
+          <div class="bar-container">
+            <div class="bar-fill" id="bar-heap-fill" style="width: 42%;"></div>
+          </div>
+          <div class="telem-sub" id="val-heap-sub">PSRAM: 8MB Ready</div>
+        </article>
+
+        <!-- CPU & Uptime Card -->
+        <article class="telemetry-card" id="card-cpu">
+          <div class="telem-header">
+            <span>CHIP & CLOCK</span>
+            <svg class="telem-icon" viewBox="0 0 24 24" fill="none" stroke="#ff9100" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+            </svg>
+          </div>
+          <div class="telem-val" id="val-cpu-freq">240<span>MHz</span></div>
+          <div class="telem-sub" id="val-uptime">ESP32-S3 Dual-Core</div>
+        </article>
+
+        <!-- Active Module Card -->
+        <article class="telemetry-card" id="card-active-tool">
+          <div class="telem-header">
+            <span>ACTIVE SYSTEM</span>
+            <svg class="telem-icon" viewBox="0 0 24 24" fill="none" stroke="#b388ff" stroke-width="2">
+              <circle cx="12" cy="12" r="10"/>
+              <polygon points="10,8 16,12 10,16"/>
+            </svg>
+          </div>
+          <div class="telem-val" id="val-active-menu" style="font-size: 1.15rem;">Tools</div>
+          <div class="telem-sub" id="val-active-sub">Submenu Ready</div>
+        </article>
+      </section>
+
+      <!-- TFT Screen Mirror Bezel -->
+      <section class="screen-mirror-card" id="tft-screen-mirror">
+        <div class="tft-bezel">
+          <div class="tft-top-bar">
+            <span id="mirror-header-title">ESP32-R3X OS v3.0</span>
+            <span id="mirror-header-bat">4.15V [||||]</span>
+          </div>
+          <div class="tft-main-view">
+            <div class="tft-menu-title" id="mirror-menu-title">TOOLS & UTILITIES</div>
+            <div class="tft-sub-item" id="mirror-sub-title">&gt; Serial Monitor &lt;</div>
+          </div>
+          <div class="tft-footer-bar">
+            <span id="mirror-footer-layer">LAYER: MAIN</span>
+            <span id="mirror-footer-sync">LIVE TELEMETRY SYNC</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Cyberdeck D-Pad Controller -->
+      <section class="controller-section" id="dpad-controller" aria-label="Hardware Remote Control">
+        <div class="dpad-container">
+          <button type="button" class="dpad-btn up" id="btn-key-up" aria-label="Navigate Up">&uarr;</button>
+          <button type="button" class="dpad-btn down" id="btn-key-down" aria-label="Navigate Down">&darr;</button>
+          <button type="button" class="dpad-btn left" id="btn-key-left" aria-label="Navigate Left">&larr;</button>
+          <button type="button" class="dpad-btn right" id="btn-key-right" aria-label="Navigate Right">&rarr;</button>
+          <button type="button" class="dpad-btn center" id="btn-key-select" aria-label="Select">SELECT</button>
+        </div>
+
+        <div class="controller-action-row">
+          <button type="button" class="action-btn exit" id="btn-key-exit">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            BACK / EXIT
+          </button>
+          <button type="button" class="action-btn select" id="btn-key-quick-diag">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            PROBE DIAG
+          </button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- MAIN VIEW 2: FULL LAUNCHPAD & 10+ TOOLS -->
+    <section class="view-section" id="view-launchpad">
+      <h2 style="font-size: 1.1rem; margin-bottom: 4px;">Hardware Feature Suite</h2>
+      <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px;">
+        1-Tap remote execution across all RF, Sub-GHz, Automotive, and Core modules.
+      </p>
+
+      <!-- TOOLS SUITE (10+ UTILITIES WITH SCROLL & DIRECT ACCESS) -->
+      <div class="launcher-category-title">
+        <span>Tools &amp; Utilities Suite (10+ Features)</span>
+      </div>
+      <div class="feature-grid" id="grid-tools-features">
+        <button type="button" class="feature-tile" data-launch="6 0 0">
+          <div class="tile-icon-box">&gt;_</div>
+          <div class="tile-content">
+            <h3>Serial Monitor</h3>
+            <p>115200 Baud Console</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile orange" data-launch="6 1 0">
+          <div class="tile-icon-box">&#8679;</div>
+          <div class="tile-content">
+            <h3>Update Firmware</h3>
+            <p>OTA &amp; SD Flasher</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile green" data-launch="6 2 0">
+          <div class="tile-icon-box">&#9782;</div>
+          <div class="tile-content">
+            <h3>Touch Calibrate</h3>
+            <p>XPT2046 5-Point</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile purple" data-launch="6 3 0">
+          <div class="tile-icon-box">&#9881;</div>
+          <div class="tile-content">
+            <h3>Hardware Info</h3>
+            <p>eFuse &amp; Bus Map</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile" data-launch="6 4 0">
+          <div class="tile-icon-box">&#128193;</div>
+          <div class="tile-content">
+            <h3>SD File Manager</h3>
+            <p>Browse &amp; Execute</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile orange" data-launch="6 5 0">
+          <div class="tile-icon-box">&#9889;</div>
+          <div class="tile-content">
+            <h3>GPIO Dashboard</h3>
+            <p>Pin Logic &amp; PWM</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile green" data-launch="6 6 0">
+          <div class="tile-icon-box">&#128038;</div>
+          <div class="tile-content">
+            <h3>BadUSB Ducky</h3>
+            <p>HID Script Injector</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile purple" data-launch="6 7 0">
+          <div class="tile-icon-box">&#127760;</div>
+          <div class="tile-content">
+            <h3>Web Cyberdeck</h3>
+            <p>HTTP Telemetry AP</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile" data-launch="6 8 0">
+          <div class="tile-icon-box">&#127912;</div>
+          <div class="tile-content">
+            <h3>Theme Engine</h3>
+            <p>Live Color Switcher</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile orange" data-launch="6 9 0">
+          <div class="tile-icon-box">&#128267;</div>
+          <div class="tile-content">
+            <h3>Fuel Gauge</h3>
+            <p>LiPo Coulombs</p>
+          </div>
+        </button>
+      </div>
+
+      <!-- WIRELESS RF & HARDWARE ATTACK ENGINES -->
+      <div class="launcher-category-title">
+        <span>RF &amp; Hardware Engines</span>
+      </div>
+      <div class="feature-grid">
+        <button type="button" class="feature-tile" data-launch="0 0 0">
+          <div class="tile-icon-box">&#128246;</div>
+          <div class="tile-content">
+            <h3>WiFi Scanner</h3>
+            <p>2.4GHz Beacon Scan</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile orange" data-launch="4 0 0">
+          <div class="tile-icon-box">&#128254;</div>
+          <div class="tile-content">
+            <h3>BLE Recon</h3>
+            <p>Advertiser &amp; Spam</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile green" data-launch="5 0 0">
+          <div class="tile-icon-box">&#128225;</div>
+          <div class="tile-content">
+            <h3>Sub-GHz CC1101</h3>
+            <p>300-928 MHz Radio</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile purple" data-launch="2 0 4">
+          <div class="tile-icon-box">&#128663;</div>
+          <div class="tile-content">
+            <h3>Automotive CAN</h3>
+            <p>500k Sniffer &amp; Fuzz</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile" data-launch="2 0 2">
+          <div class="tile-icon-box">&#128179;</div>
+          <div class="tile-content">
+            <h3>RFID/NFC PN532</h3>
+            <p>13.56MHz Mifare</p>
+          </div>
+        </button>
+
+        <button type="button" class="feature-tile orange" data-launch="2 0 3">
+          <div class="tile-icon-box">&#127757;</div>
+          <div class="tile-content">
+            <h3>GPS Tracker</h3>
+            <p>Neo-6M NMEA Feed</p>
+          </div>
+        </button>
+      </div>
+    </section>
+
+    <!-- MAIN VIEW 3: LIVE TERMINAL & CONSOLE -->
+    <section class="view-section" id="view-terminal">
+      <div class="terminal-window" id="terminal-container">
+        <div class="terminal-header">
+          <span>ESP32-R3X SYNC CONSOLE</span>
+          <div class="term-controls">
+            <button type="button" class="term-btn" id="btn-clear-term">CLEAR</button>
+            <button type="button" class="term-btn" id="btn-export-log">EXPORT</button>
+          </div>
+        </div>
+        <div class="terminal-body" id="term-output">
+          <div class="term-line info">[SYS] ESP32-R3X Mobile Companion Initialized.</div>
+          <div class="term-line info">[SYS] Ready to establish hardware link over BLE / WiFi / Serial.</div>
+        </div>
+        <div class="terminal-input-bar">
+          <span style="color: var(--cyan-glow); font-family: var(--font-mono); font-size: 0.8rem;">&gt;</span>
+          <input type="text" id="term-input" class="terminal-input" placeholder="Type command (PING, STATUS, HEAP, DIAG)..." autocomplete="off" spellcheck="false">
+          <button type="button" id="btn-send-cli" class="term-btn" style="color: var(--cyan-glow); border-color: var(--cyan-glow);">SEND</button>
+        </div>
+      </div>
+
+      <!-- Quick Command Buttons -->
+      <div class="quick-cli-row" id="quick-cli-bar">
+        <button type="button" class="chip-btn" data-cmd="PING">PING</button>
+        <button type="button" class="chip-btn" data-cmd="STATUS">STATUS</button>
+        <button type="button" class="chip-btn" data-cmd="HEAP">HEAP</button>
+        <button type="button" class="chip-btn" data-cmd="DIAG">DIAG</button>
+        <button type="button" class="chip-btn" data-cmd="TEST ALL">TEST ALL</button>
+        <button type="button" class="chip-btn" data-cmd="EXIT">EXIT</button>
+        <button type="button" class="chip-btn" data-cmd="REBOOT">REBOOT</button>
+      </div>
+    </section>
+
+    <!-- MAIN VIEW 4: SETTINGS & SYNC CONFIG -->
+    <section class="view-section" id="view-settings">
+      <h2 style="font-size: 1.1rem; margin-bottom: 4px;">Companion Configuration</h2>
+      <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 14px;">
+        Manage always-on hardware connection, sign-in credentials, and UI theme.
+      </p>
+
+      <div class="signin-card" style="margin: 0 0 16px 0;">
+        <h3 style="font-size: 0.95rem; margin-bottom: 8px;">Hardware Connection Mode</h3>
+        <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px;">
+          Choose whether the mobile app automatically wakes up and syncs via Bluetooth LE advertising, SoftAP WiFi, or USB.
+        </p>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; margin-bottom: 12px; cursor: pointer;">
+          <span>Always-On Background Auto-Reconnect</span>
+          <input type="checkbox" id="toggle-auto-reconnect" checked style="width: 18px; height: 18px; accent-color: var(--cyan-glow);">
+        </label>
+
+        <label style="display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem; margin-bottom: 12px; cursor: pointer;">
+          <span>Haptic Vibration Feedback</span>
+          <input type="checkbox" id="toggle-haptic" checked style="width: 18px; height: 18px; accent-color: var(--cyan-glow);">
+        </label>
+
+        <div style="margin-top: 14px;">
+          <label style="display: block; font-size: 0.76rem; color: var(--text-muted); margin-bottom: 4px;">UI COLOR THEME</label>
+          <div class="quick-connect-chips">
+            <button type="button" class="chip-btn active" data-theme-btn="cyber">Cyber Cyan</button>
+            <button type="button" class="chip-btn" data-theme-btn="matrix">Matrix Green</button>
+            <button type="button" class="chip-btn" data-theme-btn="crimson">Crimson Red</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="signin-card" style="margin: 0;">
+        <h3 style="font-size: 0.95rem; margin-bottom: 8px;">Install PWA to Mobile Home Screen</h3>
+        <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 12px;">
+          Add this companion app to your iPhone or Android home screen for full-screen standalone cyberdeck access.
+        </p>
+        <button type="button" id="btn-install-pwa" class="btn-pair" style="width: 100%; justify-content: center; padding: 12px;">
+          INSTALL COMPANION APP
+        </button>
+      </div>
+    </section>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav" id="bottom-navigation" aria-label="Primary Navigation">
+      <button type="button" class="nav-item active" data-view="view-dashboard" id="nav-dashboard">
+        <svg viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7"/>
+          <rect x="14" y="3" width="7" height="7"/>
+          <rect x="14" y="14" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/>
+        </svg>
+        <span>Remote</span>
+      </button>
+
+      <button type="button" class="nav-item" data-view="view-launchpad" id="nav-launchpad">
+        <svg viewBox="0 0 24 24">
+          <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+        </svg>
+        <span>Tools</span>
+      </button>
+
+      <button type="button" class="nav-item" data-view="view-terminal" id="nav-terminal">
+        <svg viewBox="0 0 24 24">
+          <polyline points="4,17 10,11 4,5"/>
+          <line x1="12" y1="19" x2="20" y2="19"/>
+        </svg>
+        <span>Console</span>
+      </button>
+
+      <button type="button" class="nav-item" data-view="view-settings" id="nav-settings">
+        <svg viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span>Config</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

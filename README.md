@@ -24,6 +24,11 @@
 > **HARDWARE TARGET: ESP32-S3 ONLY (QFN56 N16R8)**  
 > This firmware is optimized and designed **exclusively for the ESP32-S3 microcontroller** (16MB Flash, 8MB PSRAM). It leverages the ESP32-S3 dual-core Xtensa LX7 @ 240MHz architecture, hardware USB-OTG BadUSB engine, dedicated dual-SPI buses, and TWAI CAN controller.
 
+> [!TIP]
+> ### 🌐 [⚡ LAUNCH WEB FLASHER (ZERO INSTALL IN BROWSER)](https://little-sufi.github.io/ESP32-R3X/flasher.html)
+> **No drivers, Python, or software downloads required.**  
+> Simply plug your ESP32-S3 into your PC via USB-C, open **[little-sufi.github.io/ESP32-R3X/flasher.html](https://little-sufi.github.io/ESP32-R3X/flasher.html)** in **Google Chrome** or **Microsoft Edge**, select **v3.0 Powerhouse** or **v2.0 Stable**, and click **Connect & Flash Device**!
+
 ---
 
 ## 📚 Firmware Releases Overview

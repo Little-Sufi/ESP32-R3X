@@ -4,9 +4,23 @@ Standalone firmware source code and binary release package for **ESP32-R3X v2.0*
 
 ---
 
-## ⚡ 1-Click Installation (Primary Method)
+## ⚡ Installation & Flashing
+ 
+### Method 1: 🌐 Direct Web Flasher (Zero-Install in Browser — Primary Recommended)
 
-The primary and recommended method to flash ESP32-R3X v2.0 is the self-healing automated batch script:
+Flash v2.0 Stable directly in your browser without downloading files, installing Python, or setting up drivers:
+
+1. Connect your **ESP32-S3** board to your PC via a USB-C data cable.
+2. Open the **[ESP32-R3X Web Flasher](https://little-sufi.github.io/ESP32-R3X/flasher.html)** in **Google Chrome**, **Microsoft Edge**, or **Opera**.
+3. Select **🛡️ v2.0 Stable**.
+4. Click **Connect & Flash Device**, select your device's COM port from the browser popup, and click **Install**.
+5. Once flashing completes, press the **RESET** button on the board.
+
+---
+
+### Method 2: ⚡ 1-Click Desktop Batch Script (`flash_r3x.bat`)
+
+For offline or desktop command line flashing:
 
 1. Download or locate `flash_r3x.bat` inside the `Binaries/` folder (or extracted from `ESP32-R3X-Flasher-v2.0.zip`).
 2. Connect your ESP32-S3 via USB.
@@ -16,7 +30,7 @@ The primary and recommended method to flash ESP32-R3X v2.0 is the self-healing a
    ```
    *(Example: `flash_r3x.bat COM9`. If omitted, the script auto-detects connected serial ports).*
 
-### Automated Prerequisites Handled by `flash_r3x.bat`:
+#### Automated Prerequisites Handled by `flash_r3x.bat`:
 - **Python 3.8+ Check**: Verifies Python is installed on your Windows system.
 - **Auto-Install `esptool`**: Automatically checks for `esptool` and runs `python -m pip install --upgrade esptool` if not present.
 - **Unified 0x0 Flash**: Installs the complete 4MB single-image binary without complex partition offsets.
