@@ -2,28 +2,37 @@
   const REPO_API = "https://api.github.com/repos/Little-Sufi/ESP32-R3X";
 
   const BOARD_CONFIG = {
-    v2: { prefix: "ESP32-R3X-v2", manifestName: "ESP32-R3X v2", chipFamily: "ESP32-S3" },
-    v1: { prefix: "ESP32-R3X-v1", manifestName: "ESP32-R3X v1", chipFamily: "ESP32" },
-    cyd: { prefix: "ESP32-R3X-cyd", manifestName: "ESP32-R3X CYD", chipFamily: "ESP32" },
+    v3: {
+      name: "ESP32-R3X v3.0 Powerhouse",
+      manifestFile: "manifest_v3.json",
+      file: "ESP32-R3X-v3.0-merged.bin",
+      binPath: "firmware/ESP32-R3X-v3.0-merged.bin",
+      chip: "ESP32-S3",
+      chipFamily: "ESP32-S3",
+      version: "v3.0",
+      tagText: "v3.0 (Powerhouse)",
+      meta: "ESP32-S3 · 2.0 MB · CAN Bus + Sub-GHz Waterfall + Tools Next/Prev Page"
+    },
+    v2: {
+      name: "ESP32-R3X v2.0 Stable",
+      manifestFile: "manifest_v2.json",
+      file: "ESP32-R3X-v2.0-merged.bin",
+      binPath: "firmware/ESP32-R3X-v2.0-merged.bin",
+      chip: "ESP32-S3",
+      chipFamily: "ESP32-S3",
+      version: "v2.0",
+      tagText: "v2.0 (Stable)",
+      meta: "ESP32-S3 · 2.0 MB · Multi-band RF Baseline + PCAP + WiGLE Wardriving"
+    }
   };
 
-  let repoVersion = "1.7.2";
-  let releaseAssets = {};
-  let manifestBlobUrl = null;
+  let repoVersion = "3.0";
   let firmwareReady = true;
 
   function formatCount(n) {
     if (n >= 10000) return `${Math.round(n / 1000)}k`;
     if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
     return String(n);
-  }
-
-  function mergedFileName(prefix, version) {
-    return `${prefix}-v${version}-merged.bin`;
-  }
-
-  function releaseFileName(prefix, version) {
-    return `${prefix}-v${version}.bin`;
   }
 
   function applyVersionLabels() {
@@ -39,85 +48,10 @@
     if (forksEl) forksEl.textContent = formatCount(forks);
   }
 
-  function setInstallManifest(boardKey, binPath) {
-    const cfg = BOARD_CONFIG[boardKey];
-    if (!cfg || !installBtn) return;
-    if (manifestBlobUrl) URL.revokeObjectURL(manifestBlobUrl);
-    const firmwareUrl = new URL(binPath, window.location.href);
-    firmwareUrl.searchParams.set("cb", repoVersion);
-    const manifest = {
-      name: cfg.manifestName,
-      version: repoVersion,
-      new_install_prompt_erase: true,
-      builds: [
-        {
-          chipFamily: cfg.chipFamily,
-          parts: [{ path: firmwareUrl.href, offset: 0 }],
-        },
-      ],
-    };
-    manifestBlobUrl = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: "application/json" }));
-    installBtn.setAttribute("manifest", manifestBlobUrl);
-  }
-
   function updateInstallVisibility() {
     if (!installBtn) return;
     const serialOk = "serial" in navigator;
-    installBtn.style.display = serialOk && firmwareReady ? "" : "none";
-  }
-
-  async function checkFirmware(binPath, boardKey) {
-    const warn = document.getElementById("fw-stale-warn");
-    const releaseLink = document.getElementById("release-dl-link");
-    const prefix = BOARD_CONFIG[boardKey]?.prefix;
-    const releaseName = prefix ? releaseFileName(prefix, repoVersion) : "";
-    const releaseUrl = releaseAssets[releaseName];
-
-    try {
-      firmwareReady = (await fetch(binPath, { method: "HEAD" })).ok;
-    } catch {
-      firmwareReady = false;
-    }
-
-    if (warn) warn.hidden = firmwareReady;
-    if (releaseLink && releaseUrl) releaseLink.href = releaseUrl;
-    updateInstallVisibility();
-    return firmwareReady;
-  }
-
-  /* —— Mobile nav —— */
-  const burger = document.getElementById("nav-burger");
-  const links = document.getElementById("nav-links");
-
-  burger?.addEventListener("click", () => links?.classList.toggle("is-open"));
-  links?.addEventListener("click", (e) => {
-    if (e.target.tagName === "A") {
-      links.classList.remove("is-open");
-      const href = e.target.getAttribute("href");
-      if (href?.startsWith("#") && href.length > 1) {
-        e.preventDefault();
-        document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
-      }
-    }
-  });
-
-  /* —— Scroll reveal —— */
-  const revealEls = document.querySelectorAll("[data-reveal]");
-  if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("is-in");
-            io.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
-    revealEls.forEach((el) => io.observe(el));
-  } else {
-    revealEls.forEach((el) => el.classList.add("is-in"));
+    installBtn.style.display = serialOk ? "" : "none";
   }
 
   /* —— Flasher board picker —— */
@@ -129,9 +63,9 @@
   const esptoolCmd = document.getElementById("esptool-cmd");
   const startEsptoolCmd = document.getElementById("start-esptool-cmd");
 
-  function updateEsptoolCommands(board, fileName) {
+  function updateEsptoolCommands(fileName) {
     const cmd =
-      `esptool.py --chip ${board.dataset.esptool} --baud 921600 write_flash 0x0 ${fileName}`;
+      `python -m esptool --chip esp32s3 --baud 921600 write-flash 0x0 ${fileName}`;
     if (esptoolCmd) esptoolCmd.textContent = cmd;
     if (startEsptoolCmd) startEsptoolCmd.textContent = cmd;
   }
@@ -141,36 +75,34 @@
     const cfg = BOARD_CONFIG[boardKey];
     if (!cfg) return;
 
-    picker.querySelectorAll(".board").forEach((b) => b.classList.remove("is-active"));
+    picker?.querySelectorAll(".board").forEach((b) => b.classList.remove("is-active"));
     board.classList.add("is-active");
 
-    const fileName = mergedFileName(cfg.prefix, repoVersion);
-    const binPath = `firmware/${fileName}`;
-    const releaseName = releaseFileName(cfg.prefix, repoVersion);
-    const releaseUrl = releaseAssets[releaseName];
+    const fileName = cfg.file;
+    const binPath = cfg.binPath;
 
-    setInstallManifest(boardKey, binPath);
+    if (installBtn) {
+      installBtn.setAttribute("manifest", cfg.manifestFile);
+    }
 
     if (dlBtn) {
       dlBtn.href = binPath;
+      dlBtn.setAttribute("download", fileName);
       dlBtn.removeAttribute("target");
       dlBtn.removeAttribute("rel");
     }
 
-    checkFirmware(binPath, boardKey).then((ok) => {
-      if (!ok && releaseUrl && dlBtn) {
-        dlBtn.href = releaseUrl;
-        dlBtn.target = "_blank";
-        dlBtn.rel = "noopener";
-      }
-    });
-
     if (fwName) fwName.textContent = fileName;
-    if (fwMeta) {
-      fwMeta.textContent =
-        `${board.dataset.chip} · ${board.dataset.size} · complete image (bootloader + partitions + app)`;
-    }
-    updateEsptoolCommands(board, fileName);
+    if (fwMeta) fwMeta.textContent = cfg.meta;
+
+    const fwTag = document.getElementById("fw-tag");
+    if (fwTag) fwTag.textContent = cfg.version;
+
+    const flasherVerTag = document.getElementById("flasher-ver-tag");
+    if (flasherVerTag) flasherVerTag.textContent = cfg.tagText;
+
+    updateEsptoolCommands(fileName);
+    updateInstallVisibility();
   }
 
   picker?.addEventListener("click", (e) => {

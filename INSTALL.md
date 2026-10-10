@@ -4,9 +4,23 @@ This guide walks you through flashing the official pre-compiled firmware binarie
 
 ---
 
-## ⚡ Primary Method: 1-Click Auto-Flasher (`flash_r3x.bat`)
+## 🌐 Method 1: Direct Web Flasher (Zero-Install in Browser)
 
-The primary and officially recommended installation method on Windows is the self-healing automated batch script:
+The fastest and most convenient method. Flash directly from your web browser (Chrome, Edge, or Opera) without installing Python, drivers, or software:
+
+1. Connect your **ESP32-S3** board to your PC via USB-C.
+2. Open the **[ESP32-R3X Web Flasher](https://little-sufi.github.io/ESP32-R3X/flasher.html)**.
+3. Select your desired release:
+   - **⚡ v3.0 Powerhouse** (Flagship with CAN Bus, Tools pages, Sub-GHz waterfall)
+   - **🛡️ v2.0 Stable** (Classic multi-band baseline)
+4. Click **Connect & Flash Device**, select your board's serial port in the browser popup, and click **Install**.
+5. When finished, press **RESET** on the board.
+
+---
+
+## ⚡ Method 2: 1-Click Auto-Flasher (`flash_r3x.bat`)
+
+The recommended desktop method on Windows using the self-healing automated batch script:
 
 1. Connect your **ESP32-S3** board to your PC via USB-C.
 2. Navigate to your desired version folder:

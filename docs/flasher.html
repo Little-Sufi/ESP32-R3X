@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="ESP32-R3X Direct Web Flasher — Flash v3.0 Powerhouse or v2.0 Stable directly to your ESP32-S3 over Web Serial in Chrome or Edge." />
+  <title>⚡ ESP32-R3X Web Flasher — Zero-Install Browser Flasher</title>
+  <meta name="theme-color" content="#0a0a0b" />
+
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" />
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- ESP Web Tools Official Web Component -->
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+
+  <style>
+    .flasher-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 10%, rgba(0, 229, 255, 0.08), transparent 60%), #0a0a0b;
+      color: #e6edf3;
+      font-family: 'Inter', sans-serif;
+    }
+    .flasher-container {
+      max-width: 860px;
+      margin: 40px auto 60px;
+      padding: 0 20px;
+      width: 100%;
+    }
+    .flasher-hero {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    .flasher-hero h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 40%, #00e5ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .flasher-hero p {
+      color: #8b949e;
+      font-size: 1.1rem;
+      max-width: 620px;
+      margin: 0 auto;
+      line-height: 1.6;
+    }
+    .flasher-card {
+      background: rgba(18, 20, 26, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 32px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 24px rgba(0, 229, 255, 0.05);
+    }
+    .version-selector {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 600px) {
+      .version-selector { grid-template-columns: 1fr; }
+    }
+    .version-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 2px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s ease;
+      color: inherit;
+    }
+    .version-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(0, 229, 255, 0.4);
+      transform: translateY(-2px);
+    }
+    .version-btn.active {
+      background: rgba(0, 229, 255, 0.08);
+      border-color: #00e5ff;
+      box-shadow: 0 0 16px rgba(0, 229, 255, 0.2);
+    }
+    .version-btn__title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .version-btn__desc {
+      font-size: 0.85rem;
+      color: #8b949e;
+      line-height: 1.4;
+    }
+    .active-info {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+    }
+    .active-info__name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      color: #58a6ff;
+    }
+    .active-info__meta {
+      font-size: 0.82rem;
+      color: #8b949e;
+    }
+    .action-row {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    esp-web-install-button {
+      flex: 1;
+      min-width: 220px;
+    }
+    esp-web-install-button button {
+      width: 100%;
+      padding: 16px 28px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #00e5ff, #0077ff);
+      color: #0a0a0b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 16px rgba(0, 229, 255, 0.3);
+    }
+    esp-web-install-button button:hover {
+      box-shadow: 0 6px 24px rgba(0, 229, 255, 0.5);
+      transform: translateY(-1px);
+    }
+    .dl-btn {
+      padding: 15px 22px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.05);
+      color: #e6edf3;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+    }
+    .dl-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+    .instructions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-top: 32px;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .instruction-step {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .instruction-step__num {
+      color: #00e5ff;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+    .instruction-step__title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 4px;
+    }
+    .instruction-step__text {
+      color: #8b949e;
+      font-size: 0.8rem;
+      line-height: 1.4;
+    }
+    .browser-callout {
+      margin-top: 20px;
+      padding: 14px 18px;
+      background: rgba(255, 171, 0, 0.08);
+      border: 1px solid rgba(255, 171, 0, 0.25);
+      border-radius: 8px;
+      color: #ffab00;
+      font-size: 0.88rem;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .browser-callout i { font-size: 1.25rem; flex-shrink: 0; }
+  </style>
+</head>
+<body class="flasher-page">
+
+  <div class="flasher-container">
+    <div style="margin-bottom: 24px;">
+      <a href="index.html" style="color: #8b949e; text-decoration: none; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px;">
+        <i class="ti ti-arrow-left"></i> Back to Main Site
+      </a>
+    </div>
+
+    <div class="flasher-hero">
+      <h1>⚡ ESP32-R3X Web Flasher</h1>
+      <p>Direct in-browser firmware installer over Web Serial. No compiler, drivers, or software installation needed.</p>
+    </div>
+
+    <div class="flasher-card">
+      <div style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin-bottom: 12px;">
+        1. Select Firmware Generation
+      </div>
+
+      <div class="version-selector">
+        <button class="version-btn active" id="btn-v3" onclick="setVersion('v3')">
+          <div class="version-btn__title">
+            <span>⚡ v3.0 Powerhouse</span>
+            <span style="font-size: 0.7rem; background: #00e5ff; color: #000; padding: 2px 6px; border-radius: 4px;">FLAGSHIP</span>
+          </div>
+          <div class="version-btn__desc">
+            Automotive CAN Bus, Sub-GHz live waterfall, Tools Next/Prev pagination, MAX17048 fuel gauge.
+          </div>
+        </button>
+
+        <button class="version-btn" id="btn-v2" onclick="setVersion('v2')">
+          <div class="version-btn__title">
+            <span>🛡️ v2.0 Stable</span>
+            <span style="font-size: 0.7rem; background: #8b949e; color: #000; padding: 2px 6px; border-radius: 4px;">CLASSIC</span>
+          </div>
+          <div class="version-btn__desc">
+            Multi-band RF baseline (CC1101 + NRF24 + PN532 + GPS + IR), PCAP logging & wardriving.
+          </div>
+        </button>
+      </div>
+
+      <div class="active-info">
+        <div>
+          <div class="active-info__name" id="selected-bin-name">ESP32-R3X-v3.0-merged.bin</div>
+          <div class="active-info__meta" id="selected-bin-meta">ESP32-S3 · 2.0 MB · Unified single-image (0x0)</div>
+        </div>
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; background: rgba(0, 229, 255, 0.1); color: #00e5ff; border: 1px solid rgba(0, 229, 255, 0.2); padding: 4px 8px; border-radius: 4px;" id="selected-version-tag">
+          v3.0.0
+        </span>
+      </div>
+
+      <div style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: #8b949e; margin-bottom: 12px;">
+        2. Flash Firmware
+      </div>
+
+      <div class="action-row">
+        <esp-web-install-button id="web-flasher-button" manifest="manifest_v3.json">
+          <button slot="activate">
+            <i class="ti ti-bolt"></i> Connect & Flash Device
+          </button>
+          <span slot="unsupported">Web Serial is not supported in this browser.</span>
+          <span slot="not-allowed">Serial access denied or blocked.</span>
+        </esp-web-install-button>
+
+        <a class="dl-btn" id="direct-dl-btn" href="firmware/ESP32-R3X-v3.0-merged.bin" download="ESP32-R3X-v3.0-merged.bin">
+          <i class="ti ti-download"></i> Download .bin
+        </a>
+      </div>
+
+      <div id="serial-unsupported-msg" class="browser-callout" style="display: none;">
+        <i class="ti ti-alert-triangle"></i>
+        <div>
+          <strong>Browser Notice:</strong> Web Serial requires <strong>Google Chrome</strong>, <strong>Microsoft Edge</strong>, or <strong>Opera</strong> on desktop. Safari, Firefox, and mobile browsers do not support Web Serial.
+        </div>
+      </div>
+
+      <div class="instructions-grid">
+        <div class="instruction-step">
+          <div class="instruction-step__num">STEP 01</div>
+          <div class="instruction-step__title">Connect USB-C</div>
+          <div class="instruction-step__text">Plug your ESP32-S3 board into your computer with a data-capable USB-C cable.</div>
+        </div>
+        <div class="instruction-step">
+          <div class="instruction-step__num">STEP 02</div>
+          <div class="instruction-step__title">Bootloader Mode</div>
+          <div class="instruction-step__text">If not detected: Hold <strong>BOOT</strong>, press & release <strong>RESET</strong>, then release BOOT.</div>
+        </div>
+        <div class="instruction-step">
+          <div class="instruction-step__num">STEP 03</div>
+          <div class="instruction-step__title">Click & Install</div>
+          <div class="instruction-step__text">Click the blue button above, pick the COM port from the prompt, and select <strong>Install</strong>.</div>
+        </div>
+        <div class="instruction-step">
+          <div class="instruction-step__num">STEP 04</div>
+          <div class="instruction-step__title">Reboot Board</div>
+          <div class="instruction-step__text">Once flashing finishes, press the physical <strong>RESET</strong> button on the board to boot into the UI!</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CONFIGS = {
+      v3: {
+        name: 'ESP32-R3X-v3.0-merged.bin',
+        meta: 'ESP32-S3 · 2.0 MB · Unified single-image (0x0)',
+        tag: 'v3.0.0',
+        manifest: 'manifest_v3.json',
+        download: 'firmware/ESP32-R3X-v3.0-merged.bin'
+      },
+      v2: {
+        name: 'ESP32-R3X-v2.0-merged.bin',
+        meta: 'ESP32-S3 · 2.0 MB · Unified single-image (0x0)',
+        tag: 'v2.0.0',
+        manifest: 'manifest_v2.json',
+        download: 'firmware/ESP32-R3X-v2.0-merged.bin'
+      }
+    };
+
+    function setVersion(ver) {
+      const cfg = CONFIGS[ver];
+      if (!cfg) return;
+
+      document.getElementById('btn-v3').classList.toggle('active', ver === 'v3');
+      document.getElementById('btn-v2').classList.toggle('active', ver === 'v2');
+
+      document.getElementById('selected-bin-name').textContent = cfg.name;
+      document.getElementById('selected-bin-meta').textContent = cfg.meta;
+      document.getElementById('selected-version-tag').textContent = cfg.tag;
+
+      const btn = document.getElementById('web-flasher-button');
+      if (btn) btn.setAttribute('manifest', cfg.manifest);
+
+      const dl = document.getElementById('direct-dl-btn');
+      if (dl) {
+        dl.href = cfg.download;
+        dl.setAttribute('download', cfg.name);
+      }
+    }
+
+    if (!('serial' in navigator)) {
+      document.getElementById('serial-unsupported-msg').style.display = 'flex';
+    }
+  </script>
+</body>
+</html>

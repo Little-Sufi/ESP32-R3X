@@ -222,13 +222,13 @@
       <div class="section__inner">
         <span class="eyebrow"><i class="hn hn-bolt"></i>Flash</span>
         <h2 class="section__title">Flash from<br />your browser<span class="accent">.</span></h2>
-        <p class="section__sub">No toolchain needed — pick your board, plug in USB, and flash <span data-repo-version>v1.7.2</span> over Web Serial.</p>
+        <p class="section__sub">Zero installation required — connect your ESP32-S3 via USB-C, choose <strong>v3.0 Powerhouse</strong> or <strong>v2.0 Stable</strong>, and flash directly in your browser over Web Serial.</p>
 
         <div class="flasher" data-reveal>
           <div class="flasher__head">
             <div>
-              <p class="flasher__label">Latest firmware</p>
-              <p class="flasher__ver" data-repo-version>v1.7.2</p>
+              <p class="flasher__label">Select Firmware Release</p>
+              <p class="flasher__ver" id="flasher-ver-tag">v3.0 Powerhouse</p>
             </div>
             <a class="flasher__releases" id="releases-link" href="https://github.com/Little-Sufi/ESP32-R3X/releases" target="_blank" rel="noopener">
               All releases <i class="ti ti-arrow-up-right"></i>
@@ -237,47 +237,41 @@
 
           <div class="flasher__boards" id="board-picker">
             <button class="board is-active"
+              data-board="v3"
+              data-chip="ESP32-S3" data-size="2.0 MB" data-esptool="esp32s3">
+              <span class="board__name">⚡ ESP32-R3X v3.0</span>
+              <span class="board__chip">Latest Flagship · CAN Bus · Tools Pages · S3</span>
+            </button>
+            <button class="board"
               data-board="v2"
-              data-chip="ESP32-S3" data-size="1.7 MB" data-esptool="esp32s3">
-              <span class="board__name">ESP32-R3X v2</span>
-              <span class="board__chip">ESP32-S3 · custom PCB</span>
-            </button>
-            <button class="board"
-              data-board="v1"
-              data-chip="ESP32" data-size="1.8 MB" data-esptool="esp32">
-              <span class="board__name">ESP32-R3X v1</span>
-              <span class="board__chip">ESP32 · custom PCB</span>
-            </button>
-            <button class="board"
-              data-board="cyd"
-              data-chip="ESP32" data-size="1.8 MB" data-esptool="esp32">
-              <span class="board__name">CYD</span>
-              <span class="board__chip">ESP32 · Cheap Yellow Display</span>
+              data-chip="ESP32-S3" data-size="2.0 MB" data-esptool="esp32s3">
+              <span class="board__name">🛡️ ESP32-R3X v2.0</span>
+              <span class="board__chip">Stable Classic · Multi-Band RF · S3</span>
             </button>
           </div>
 
           <div class="flasher__file">
             <i class="ti ti-file-code"></i>
             <div class="flasher__file-info">
-              <span class="flasher__file-name" id="fw-name">ESP32-R3X-v2-v1.7.2-merged.bin</span>
-              <span class="flasher__file-meta" id="fw-meta">ESP32-S3 · 1.7 MB · complete image (bootloader + partitions + app)</span>
+              <span class="flasher__file-name" id="fw-name">ESP32-R3X-v3.0-merged.bin</span>
+              <span class="flasher__file-meta" id="fw-meta">ESP32-S3 · 2.0 MB · complete unified image (bootloader + partitions + app)</span>
             </div>
-            <span class="flasher__file-tag" data-repo-version>v1.7.2</span>
+            <span class="flasher__file-tag" id="fw-tag">v3.0</span>
           </div>
 
           <p class="flasher__warn" id="fw-stale-warn" hidden>
             <i class="ti ti-alert-circle"></i>
-            Bundled web-flasher image for <span data-repo-version>v1.7.2</span> isn’t on this site yet —
+            Bundled web-flasher image is syncing —
             <a id="release-dl-link" href="https://github.com/Little-Sufi/ESP32-R3X/releases/latest" target="_blank" rel="noopener">download from GitHub Releases</a>.
           </p>
 
           <div class="flasher__action">
-            <esp-web-install-button id="install-btn" manifest="manifest.json">
-              <button slot="activate" class="btn btn--primary"><i class="hn hn-bolt"></i> Install firmware</button>
+            <esp-web-install-button id="install-btn" manifest="manifest_v3.json">
+              <button slot="activate" class="btn btn--primary"><i class="hn hn-bolt"></i> Connect & Flash Device</button>
               <span slot="unsupported"></span>
               <span slot="not-allowed"></span>
             </esp-web-install-button>
-            <a class="btn btn--ghost" id="dl-btn" href="firmware/ESP32-R3X-v2-v1.7.2-merged.bin" download>
+            <a class="btn btn--ghost" id="dl-btn" href="firmware/ESP32-R3X-v3.0-merged.bin" download="ESP32-R3X-v3.0-merged.bin">
               <i class="hn hn-download"></i> Download .bin
             </a>
           </div>
@@ -289,7 +283,7 @@
 
           <p class="flasher__desktop">
             <a href="https://github.com/Little-Sufi/ESP32-R3X/tree/main/tools/esp32-r3x-flasher" target="_blank" rel="noopener">
-              <i class="hn hn-cloud-download-alt"></i> Prefer a desktop app? Use ESP32-R3X Flasher
+              <i class="hn hn-cloud-download-alt"></i> Prefer a desktop script? Use flash_r3x.bat
             </a>
             ·
             <a href="#start" data-start-tab="desktop">Setup guide</a>
@@ -298,7 +292,7 @@
           <details class="flasher__alt">
             <summary><i class="ti ti-terminal-2"></i> Flash with esptool instead</summary>
             <div class="flasher__cmd-row">
-              <code class="flasher__cmd" id="esptool-cmd">esptool.py --chip esp32s3 --baud 921600 write_flash 0x0 ESP32-R3X-v2-v1.7.2-merged.bin</code>
+              <code class="flasher__cmd" id="esptool-cmd">python -m esptool --chip esp32s3 --baud 921600 write-flash 0x0 ESP32-R3X-v3.0-merged.bin</code>
               <button class="btn btn--ghost btn--sm" id="copy-cmd" title="Copy command"><i class="ti ti-copy"></i></button>
             </div>
           </details>

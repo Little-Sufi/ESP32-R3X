@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://little-sufi.github.io/ESP32-R3X/flasher.html"><img src="https://img.shields.io/badge/Web_Flasher-Flash_in_Browser-blueviolet?style=for-the-badge&logo=googlechrome" alt="Web Flasher"></a>
   <a href="https://github.com/Little-Sufi/ESP32-R3X/releases/tag/v3.0"><img src="https://img.shields.io/badge/Release-v3.0.0--Powerhouse-cyan?style=for-the-badge&logo=github" alt="Release v3.0.0"></a>
   <a href="https://github.com/Little-Sufi/ESP32-R3X/releases/tag/v2.0"><img src="https://img.shields.io/badge/Release-v2.0.0--Stable-orange?style=for-the-badge&logo=github" alt="Release v2.0.0"></a>
   <a href="https://github.com/Little-Sufi/ESP32-R3X"><img src="https://img.shields.io/badge/Hardware-ESP32--S3%20ONLY-red?style=for-the-badge&logo=espressif" alt="ESP32-S3 ONLY"></a>
@@ -146,16 +147,24 @@ Located in [`mobile_app/`](mobile_app/README.md), the **Mobile Companion** is a 
 ---
 
 ## ⚡ Flashing & Installation
+ 
+### Option 1: 🌐 Direct Web Flasher (Zero-Install in Browser)
+The fastest and easiest method — flash directly from Google Chrome, Microsoft Edge, or Opera without installing any tools or Python:
+1. Connect your **ESP32-S3** board to your computer via USB-C.
+2. Open the **[ESP32-R3X Web Flasher](https://little-sufi.github.io/ESP32-R3X/flasher.html)** (or the [GitHub Pages landing site](https://little-sufi.github.io/ESP32-R3X/#flash)).
+3. Select **⚡ v3.0 Powerhouse** or **🛡️ v2.0 Stable**.
+4. Click **Connect & Flash Device**, select your device's COM port from the browser prompt, and click **Install**.
+5. Once complete, press **RESET** on the board.
 
-### Option 1: 1-Click Batch Flasher (Primary & Recommended)
+### Option 2: ⚡ 1-Click Batch Flasher (Desktop Script)
 1. Download the release package or flasher zip (`ESP32-R3X-Flasher-v3.0.zip` or `ESP32-R3X-Flasher-v2.0.zip`) from the [Releases](https://github.com/Little-Sufi/ESP32-R3X/releases) page.
-2. Unzip and run `flash_r3x.bat` (optionally specifying your COM port, e.g., `flash_r3x.bat COM9`):
+2. Unzip and double-click `flash_r3x.bat` (optionally specifying your COM port, e.g., `flash_r3x.bat COM9`):
    ```cmd
    flash_r3x.bat
    ```
    *The flasher automatically detects your active COM port, checks for Python 3, automatically installs `esptool` via pip if missing, and flashes the unified single-image binary directly to offset `0x0`.*
 
-### Option 2: esptool Command Line
+### Option 3: 🛠️ esptool Command Line
 ```bash
 # Flash v3.0 Powerhouse
 python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 Pre-compiled\ Bin/v3.0/ESP32-R3X-v3.0-merged.bin
@@ -164,7 +173,7 @@ python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 Pre-c
 python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 Pre-compiled\ Bin/v2.0/ESP32-R3X-v2.0-merged.bin
 ```
 
-### Option 3: Compiling from Source in Arduino IDE 2.x
+### Option 4: 💻 Compiling from Source in Arduino IDE 2.x
 1. Open [`ESP32-R3X/ESP32-R3X.ino`](ESP32-R3X/ESP32-R3X.ino) (for v3.0) or [`Firmware/v2.0/ESP32-R3X/ESP32-R3X.ino`](Firmware/v2.0/ESP32-R3X/ESP32-R3X.ino) (for v2.0).
 2. Select **Board**: `ESP32S3 Dev Module`.
 3. Set **Flash Size**: `4MB` (or larger), **Partition Scheme**: `Huge APP (3MB No OTA/1MB SPIFFS)`, **USB CDC On Boot**: `Enabled`.
