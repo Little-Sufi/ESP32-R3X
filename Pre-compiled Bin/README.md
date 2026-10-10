@@ -8,15 +8,16 @@ All binaries in this directory have been tested and verified via physical hardwa
 
 ## ⚡ Method 1: Instant Single-File Flash (Recommended)
 
-Flash the entire unified image in one command at offset `0x0`:
+Choose your desired version folder (`v3.0/` for the latest release, or `v2.0/` for legacy) and run the flasher script:
 
 ```bash
-esptool.py --chip esp32s3 --port COM9 --baud 921600 write_flash 0x0 ESP32-R3X-merged.bin
+cd v3.0
+flash_r3x.bat COM9
 ```
 
-Or on Windows, simply run the included batch script:
-```cmd
-flash_r3x.bat COM9
+Or flash directly via esptool:
+```bash
+esptool.py --chip esp32s3 --port COM9 --baud 921600 write_flash 0x0 v3.0/ESP32-R3X-v3.0-merged.bin
 ```
 
 ---
