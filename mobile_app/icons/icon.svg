@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="50%" stop-color="#050811" />
+      <stop offset="100%" stop-color="#020408" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f0ff" />
+      <stop offset="100%" stop-color="#0088ff" />
+    </linearGradient>
+    <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff9100" />
+      <stop offset="100%" stop-color="#ff3d00" />
+    </linearGradient>
+    <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)" stroke="#00f0ff" stroke-opacity="0.3" stroke-width="4" />
+
+  <!-- Circuit grid background pattern -->
+  <path d="M64 128 h384 M64 256 h384 M64 384 h384 M128 64 v384 M256 64 v384 M384 64 v384" 
+        stroke="#00f0ff" stroke-opacity="0.06" stroke-width="2" stroke-dasharray="8 8" />
+
+  <!-- Cyber Hexagon Shield -->
+  <polygon points="256,70 416,162 416,350 256,442 96,350 96,162" 
+           fill="#0d1527" fill-opacity="0.8" stroke="url(#cyanGrad)" stroke-width="8" filter="url(#neonGlow)" />
+
+  <!-- Internal Shield Accent -->
+  <polygon points="256,102 386,177 386,335 256,410 126,335 126,177" 
+           fill="none" stroke="url(#orangeGrad)" stroke-width="3" stroke-opacity="0.7" stroke-dasharray="14 7" />
+
+  <!-- Central ESP32-R3X Logo Mark -->
+  <g transform="translate(256, 256)">
+    <!-- Circuit nodes -->
+    <circle cx="-90" cy="-60" r="8" fill="#00f0ff" filter="url(#neonGlow)" />
+    <path d="M-90 -60 L-50 -20" stroke="#00f0ff" stroke-width="4" stroke-linecap="round" />
+    
+    <circle cx="90" cy="60" r="8" fill="#ff9100" filter="url(#neonGlow)" />
+    <path d="M90 60 L50 20" stroke="#ff9100" stroke-width="4" stroke-linecap="round" />
+
+    <!-- Stylized "R3X" typography -->
+    <text x="0" y="24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="92" font-weight="900" text-anchor="middle" letter-spacing="4" fill="#ffffff" filter="url(#neonGlow)">
+      R<tspan fill="#00f0ff">3</tspan><tspan fill="#ff9100">X</tspan>
+    </text>
+
+    <!-- Subtitle badge -->
+    <rect x="-80" y="55" width="160" height="24" rx="12" fill="#00f0ff" fill-opacity="0.15" stroke="#00f0ff" stroke-width="1.5" />
+    <text x="0" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" 
+          font-size="12" font-weight="700" text-anchor="middle" letter-spacing="3" fill="#00f0ff">
+      SYNC COMPANION
+    </text>
+  </g>
+</svg>

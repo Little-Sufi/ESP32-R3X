@@ -1,0 +1,19 @@
+{
+  "name": "ESP32-R3X Mobile Companion",
+  "short_name": "R3X Sync",
+  "description": "Real-Time Mobile Companion & Cyberdeck Remote for ESP32-R3X Hardware Platform",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#060912",
+  "theme_color": "#00f0ff",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "hardware", "developer"]
+}

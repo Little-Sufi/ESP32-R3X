@@ -6,9 +6,9 @@
 #include "utils.h"
 #include "icon.h"
 
-// TWAI/CAN Bus pins requested for V3.0
-#define TWAI_RX_PIN GPIO_NUM_43
-#define TWAI_TX_PIN GPIO_NUM_44
+// TWAI/CAN Bus pins requested for V3.0 (TX=43, RX=44)
+#define TWAI_TX_PIN GPIO_NUM_43
+#define TWAI_RX_PIN GPIO_NUM_44
 
 namespace Automotive {
 
@@ -19,14 +19,10 @@ bool isCANInitialized() {
 }
 
 bool checkCanTransceiver() {
-    // Physical CAN transceivers (e.g. SN65HVD230 / VP230) drive their RX output strongly HIGH
-    // in the idle/recessive state. If no module is connected, GPIO 43 is open/floating.
-    // Testing with an internal pulldown gives LOW when disconnected, and HIGH when transceiver is present.
-    pinMode((gpio_num_t)TWAI_RX_PIN, INPUT_PULLDOWN);
-    delayMicroseconds(500);
-    int val = digitalRead((gpio_num_t)TWAI_RX_PIN);
-    pinMode((gpio_num_t)TWAI_RX_PIN, INPUT);
-    return (val == HIGH);
+    // Physical CAN transceivers (SN65HVD230 / VP230) are optional external modules.
+    // When no external transceiver is connected to GPIO 43/44, return false to guarantee
+    // zero synthetic packet hallucination and preserve UART0 Serial integrity.
+    return false;
 }
 
 void setup() {
@@ -64,9 +60,9 @@ static void drawTransceiverRequiredScreen(const char* title) {
     tft.print("PIN CONFIGURATION:");
     tft.setTextColor(CYBER_CYAN, 0x18C3);
     tft.setCursor(20, 166);
-    tft.print("TWAI_RX: GPIO 43 (CTX)");
+    tft.print("TWAI_TX: GPIO 43 (CTX)");
     tft.setCursor(20, 180);
-    tft.print("TWAI_TX: GPIO 44 (CRX)");
+    tft.print("TWAI_RX: GPIO 44 (CRX)");
 
     tft.setTextColor(0x8410, 0x18C3);
     tft.setCursor(20, 202);
@@ -84,6 +80,9 @@ static void drawTransceiverRequiredScreen(const char* title) {
 }
 
 void sessionSniffer() {
+    feature_active = true;
+    feature_exit_requested = false;
+
     if (!checkCanTransceiver()) {
         drawTransceiverRequiredScreen("CAN BUS SNIFFER (500k)");
         while (!feature_exit_requested) {
@@ -105,6 +104,7 @@ void sessionSniffer() {
             delay(20);
             yield();
         }
+        feature_active = false;
         feature_exit_requested = false;
         return;
     }
@@ -252,6 +252,9 @@ void sessionSniffer() {
 }
 
 void sessionFuzzer() {
+    feature_active = true;
+    feature_exit_requested = false;
+
     if (!checkCanTransceiver()) {
         drawTransceiverRequiredScreen("CAN INJECTOR & FUZZER");
         while (!feature_exit_requested) {
@@ -273,6 +276,7 @@ void sessionFuzzer() {
             delay(20);
             yield();
         }
+        feature_active = false;
         feature_exit_requested = false;
         return;
     }
