@@ -285,6 +285,18 @@
         </a>
       </div>
 
+      <div class="browser-callout" style="background: rgba(0, 229, 255, 0.05); border-color: rgba(0, 229, 255, 0.25); color: #e6edf3; margin-top: 18px;">
+        <i class="ti ti-info-circle" style="color: #00e5ff;"></i>
+        <div>
+          <strong style="color: #00e5ff;">Can't connect to serial port or "Access Denied"?</strong>
+          <ul style="margin: 6px 0 0 16px; padding: 0; font-size: 0.84rem; color: #8b949e; line-height: 1.5;">
+            <li><strong>Close Port Users:</strong> Close any software using the port (Arduino IDE Serial Monitor, PuTTY, or Mobile Bridge script) so the port is free.</li>
+            <li><strong>Force Bootloader Mode:</strong> On the ESP32 board, hold <strong>BOOT</strong>, press &amp; release <strong>RESET</strong>, then release <strong>BOOT</strong>.</li>
+            <li><strong>Select the Port:</strong> In the browser prompt, click <strong>USB-Enhanced-SERIAL CH343</strong> or <strong>CP2102</strong> and click <strong>Connect</strong>.</li>
+          </ul>
+        </div>
+      </div>
+
       <div id="serial-unsupported-msg" class="browser-callout" style="display: none;">
         <i class="ti ti-alert-triangle"></i>
         <div>

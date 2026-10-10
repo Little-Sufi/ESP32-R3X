@@ -36,6 +36,7 @@ class HardwareBridge:
         self.ser = None
         self.port_name = None
         self.is_connected = False
+        self.paused = False
         self.last_status = {
             "connected": False,
             "port": "None",
@@ -52,6 +53,27 @@ class HardwareBridge:
         self.running = True
         self.thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.thread.start()
+
+    def pause(self):
+        with self.lock:
+            self.paused = True
+            if self.ser:
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+            self.ser = None
+            self.is_connected = False
+            self.last_status["connected"] = False
+            self.last_status["port"] = "Released"
+        self._log("Serial port released for flasher/external tools")
+        return True
+
+    def resume(self):
+        with self.lock:
+            self.paused = False
+        self._log("Serial port bridge resumed")
+        return True
 
     def _log(self, msg):
         timestamp = time.strftime("%H:%M:%S")
@@ -77,6 +99,10 @@ class HardwareBridge:
     def _worker_loop(self):
         last_poll = 0
         while self.running:
+            if self.paused:
+                time.sleep(0.5)
+                continue
+
             if not self.is_connected:
                 target_port = self._find_port()
                 if target_port and SERIAL_AVAILABLE:
@@ -217,6 +243,26 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/status" or path == "/ping":
             st = bridge.get_status()
             payload = json.dumps({"ok": True, "bridge": True, "status": st}).encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
+        if path == "/api/release" or path == "/api/disconnect":
+            bridge.pause()
+            payload = json.dumps({"ok": True, "msg": "Serial port released for flasher"}).encode('utf-8')
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
+        if path == "/api/resume" or path == "/api/connect":
+            bridge.resume()
+            payload = json.dumps({"ok": True, "msg": "Serial bridge resumed"}).encode('utf-8')
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
