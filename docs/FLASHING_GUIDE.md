@@ -53,11 +53,15 @@ The fastest terminal method. Flashes the entire 4MB memory map (bootloader, part
 ### Step-by-Step:
 1. Ensure Python and `esptool` are installed (`pip install esptool`).
 2. Open PowerShell or Command Prompt in the repository root.
-3. Run:
+3. Run for **v3.0 Powerhouse**:
    ```bash
-   python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-merged.bin"
+   python -m esptool --chip esp32s3 -p COM9 -b 921600 write-flash 0x0000 "Pre-compiled Bin/v3.0/ESP32-R3X-v3.0-merged.bin"
    ```
-   *(Or simply run `Pre-compiled Bin\flash_r3x.bat COM9` or `fast_upload.bat COM9`).*
+   Or for **v2.0 Stable**:
+   ```bash
+   python -m esptool --chip esp32s3 -p COM9 -b 921600 write-flash 0x0000 "Pre-compiled Bin/v2.0/ESP32-R3X-v2.0-merged.bin"
+   ```
+   *(Or simply double-click `flash_r3x.bat` inside the respective release folder).*
 4. Once verification completes (`Hash of data verified`), the device will reset and boot into ESP32-R3X.
 
 ---
@@ -69,16 +73,16 @@ Recommended if you are developing and only wish to update the application partit
 ### Step-by-Step:
 Run:
 ```bash
-python -m esptool --chip esp32s3 -p COM9 -b 921600 --before default_reset --after hard_reset write_flash \
-  0x0000  "Pre-compiled Bin/bootloader.bin" \
-  0x8000  "Pre-compiled Bin/partitions.bin" \
-  0xe000  "Pre-compiled Bin/boot_app0.bin" \
-  0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
+python -m esptool --chip esp32s3 -p COM9 -b 921600 --before default_reset --after hard_reset write-flash \
+  0x0000  "Pre-compiled Bin/v3.0/ESP32-R3X.ino.bootloader.bin" \
+  0x8000  "Pre-compiled Bin/v3.0/ESP32-R3X.ino.partitions.bin" \
+  0xe000  "Pre-compiled Bin/v3.0/boot_app0.bin" \
+  0x10000 "Pre-compiled Bin/v3.0/ESP32-R3X.ino.bin"
 ```
 
 To flash **only the application code** without touching the bootloader:
 ```bash
-python -m esptool --chip esp32s3 -p COM9 -b 921600 write_flash 0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
+python -m esptool --chip esp32s3 -p COM9 -b 921600 write-flash 0x10000 "Pre-compiled Bin/v3.0/ESP32-R3X.ino.bin"
 ```
 
 ---

@@ -15,21 +15,23 @@ The easiest way to install ESP32-R3X is using precompiled binaries located in th
    cd tools/esp32-r3x-flasher
    python flash_r3x.py
    ```
-4. Or flash the all-in-one merged binary directly with `esptool.py` (single offset `0x0`):
-   ```bash
-   esptool.py -p COM9 -b 921600 --chip esp32s3 write_flash 0x0000 "Pre-compiled Bin/ESP32-R3X-merged.bin"
-   ```
-   Or on Windows simply run:
+4. Or run the automated 1-click batch flasher:
    ```cmd
-   Pre-compiled Bin\flash_r3x.bat COM9
+   Pre-compiled Bin\v3.0\flash_r3x.bat
+   ```
+   *(Or for v2.0: `Pre-compiled Bin\v2.0\flash_r3x.bat`)*
+
+5. Or flash the unified merged binary directly with `esptool.py` (offset `0x0`):
+   ```bash
+   python -m esptool --chip esp32s3 -p COM9 -b 921600 write-flash 0x0 "Pre-compiled Bin/v3.0/ESP32-R3X-v3.0-merged.bin"
    ```
    Or flash split components:
    ```bash
-   esptool.py -p COM9 -b 921600 --before default_reset --after hard_reset --chip esp32s3 write_flash \
-     0x0000  "Pre-compiled Bin/bootloader.bin" \
-     0x8000  "Pre-compiled Bin/partitions.bin" \
-     0xe000  "Pre-compiled Bin/boot_app0.bin" \
-     0x10000 "Pre-compiled Bin/ESP32-R3X.ino.bin"
+   python -m esptool --chip esp32s3 -p COM9 -b 921600 --before default_reset --after hard_reset write-flash \
+     0x0000  "Pre-compiled Bin/v3.0/ESP32-R3X.ino.bootloader.bin" \
+     0x8000  "Pre-compiled Bin/v3.0/ESP32-R3X.ino.partitions.bin" \
+     0xe000  "Pre-compiled Bin/v3.0/boot_app0.bin" \
+     0x10000 "Pre-compiled Bin/v3.0/ESP32-R3X.ino.bin"
    ```
 
 

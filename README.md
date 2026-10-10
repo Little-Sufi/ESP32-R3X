@@ -158,10 +158,10 @@ Located in [`mobile_app/`](mobile_app/README.md), the **Mobile Companion** is a 
 ### Option 2: esptool Command Line
 ```bash
 # Flash v3.0 Powerhouse
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 write_flash 0x0 Pre-compiled\ Bin/v3.0/ESP32-R3X-v3.0-merged.bin
+python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 Pre-compiled\ Bin/v3.0/ESP32-R3X-v3.0-merged.bin
 
 # Flash v2.0 Stable
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 write_flash 0x0 Pre-compiled\ Bin/v2.0/ESP32-R3X-v2.0-merged.bin
+python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 Pre-compiled\ Bin/v2.0/ESP32-R3X-v2.0-merged.bin
 ```
 
 ### Option 3: Compiling from Source in Arduino IDE 2.x

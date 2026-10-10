@@ -36,7 +36,7 @@ If you prefer flashing each segment individually:
 
 ### esptool Command:
 ```bash
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 --before default_reset --after hard_reset write_flash \
+python -m esptool --chip esp32s3 --port COM9 --baud 921600 --before default_reset --after hard_reset write-flash \
   0x0000  ESP32-R3X.ino.bootloader.bin \
   0x8000  ESP32-R3X.ino.partitions.bin \
   0xe000  boot_app0.bin \

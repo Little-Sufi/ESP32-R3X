@@ -27,10 +27,10 @@ The primary and recommended method to flash ESP32-R3X v2.0 is the self-healing a
 
 ```bash
 # Option A: Single-image unified flash (Recommended)
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 write_flash 0x0 ESP32-R3X-v2.0-merged.bin
+python -m esptool --chip esp32s3 --port COM9 --baud 921600 write-flash 0x0 ESP32-R3X-v2.0-merged.bin
 
 # Option B: Multi-partition flash
-python -m esptool --chip esp32s3 --port COM9 --baud 921600 --before default_reset --after hard_reset write_flash \
+python -m esptool --chip esp32s3 --port COM9 --baud 921600 --before default_reset --after hard_reset write-flash \
   0x0000  bootloader.bin \
   0x8000  partitions.bin \
   0xe000  boot_app0.bin \
