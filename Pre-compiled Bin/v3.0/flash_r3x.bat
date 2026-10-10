@@ -34,19 +34,22 @@ echo.
 REM --- 3. Port Detection ---
 set "PORT=%~1"
 if "%PORT%"=="" (
-    echo [INFO] Auto-detecting COM port...
-    for /f "tokens=*" %%P in ('python -c "import serial.tools.list_ports; ports=[p.device for p in serial.tools.list_ports.comports()]; print(ports[0] if ports else '')" 2^>nul') do set "PORT=%%P"
+    echo [INFO] Auto-detecting ESP32 serial port...
+    for /f "tokens=*" %%P in ('python -c "import serial.tools.list_ports; ports=list(serial.tools.list_ports.comports()); esp=next((p.device for p in ports if any(k in (p.description+' '+p.hwid).lower() for k in ['ch34', 'cp210', '1a86', '303a', '10c4', 'esp', 'usb-enhanced'])), None); print(esp if esp else (ports[0].device if ports else ''))" 2^>nul') do set "PORT=%%P"
+)
+if "%PORT%"=="" (
+    for /f "tokens=*" %%P in ('powershell -NoProfile -Command "[System.IO.Ports.SerialPort]::GetPortNames() | Where-Object { $_ -ne 'COM1' } | Select-Object -First 1" 2^>nul') do set "PORT=%%P"
 )
 if "%PORT%"=="" (
     for /f "tokens=*" %%P in ('powershell -NoProfile -Command "[System.IO.Ports.SerialPort]::GetPortNames() | Select-Object -First 1" 2^>nul') do set "PORT=%%P"
 )
 if "%PORT%"=="" (
-    echo [ERROR] No COM port detected! Please connect your ESP32-S3 and try again.
-    echo         Or specify manually: flash_r3x.bat COM3
+    echo [ERROR] No COM port detected! Please connect your ESP32-S3 via USB-C.
+    echo         If connected, hold BOOT and press RESET to enter download mode.
     goto :done
 )
 
-echo [INFO] Using port: %PORT%
+echo [OK] Auto-detected ESP32 on port: %PORT%
 echo.
 
 REM --- 4. Flash ---

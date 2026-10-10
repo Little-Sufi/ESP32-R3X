@@ -271,6 +271,24 @@
         2. Flash Firmware
       </div>
 
+      <!-- Live Hardware Port Auto-Detection Status -->
+      <div id="autodetect-panel" style="background: rgba(0, 229, 255, 0.04); border: 1px solid rgba(0, 229, 255, 0.2); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div id="port-status-icon" style="width: 12px; height: 12px; border-radius: 50%; background: #00e5ff; box-shadow: 0 0 10px #00e5ff;"></div>
+          <div>
+            <div id="port-status-headline" style="font-size: 0.95rem; font-weight: 700; color: #e6edf3;">
+              Checking USB Serial interfaces...
+            </div>
+            <div id="port-status-detail" style="font-size: 0.82rem; color: #8b949e;">
+              Plug in your ESP32-S3 via USB-C to auto-detect.
+            </div>
+          </div>
+        </div>
+        <button type="button" id="btn-pair-port" onclick="autoDetectAndPairPort()" style="padding: 9px 16px; font-size: 0.85rem; font-weight: 600; background: rgba(0, 229, 255, 0.12); color: #00e5ff; border: 1px solid rgba(0, 229, 255, 0.3); border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s;">
+          <i class="ti ti-bolt"></i> Auto-Detect Port
+        </button>
+      </div>
+
       <div class="action-row">
         <esp-web-install-button id="web-flasher-button" manifest="manifest_v3.json">
           <button slot="activate">
@@ -368,8 +386,90 @@
       }
     }
 
+    const ESP_FILTERS = [
+      { usbVendorId: 0x1a86 }, // WCH CH340, CH341, CH343 (Your board)
+      { usbVendorId: 0x303a }, // Espressif Native USB-JTAG/Serial
+      { usbVendorId: 0x10c4 }, // Silicon Labs CP2102
+      { usbVendorId: 0x0403 }  // FTDI
+    ];
+
+    async function checkAutoDetect() {
+      const icon = document.getElementById('port-status-icon');
+      const headline = document.getElementById('port-status-headline');
+      const detail = document.getElementById('port-status-detail');
+      const btn = document.getElementById('btn-pair-port');
+
+      if (!('serial' in navigator)) {
+        if (icon) { icon.style.background = '#8b949e'; icon.style.boxShadow = 'none'; }
+        if (headline) headline.textContent = 'Web Serial Not Supported';
+        if (detail) detail.textContent = 'Please open in Google Chrome or Microsoft Edge on desktop.';
+        if (btn) btn.style.display = 'none';
+        return;
+      }
+
+      try {
+        const ports = await navigator.serial.getPorts();
+        if (ports.length > 0) {
+          const info = ports[0].getInfo();
+          const vid = info.usbVendorId ? '0x' + info.usbVendorId.toString(16).toUpperCase() : '';
+          const pid = info.usbProductId ? '0x' + info.usbProductId.toString(16).toUpperCase() : '';
+          let name = 'ESP32-S3 Hardware';
+          if (info.usbVendorId === 0x1a86) name = 'ESP32-S3 (CH343 / CH340)';
+          else if (info.usbVendorId === 0x303a) name = 'ESP32-S3 (Espressif Native USB)';
+          else if (info.usbVendorId === 0x10c4) name = 'ESP32-S3 (CP2102)';
+
+          if (icon) { icon.style.background = '#00ff88'; icon.style.boxShadow = '0 0 12px #00ff88'; }
+          if (headline) headline.textContent = `🟢 Auto-Detected: ${name}`;
+          if (detail) detail.textContent = `Device Paired [VID: ${vid} PID: ${pid}]. Ready for 1-click install!`;
+          if (btn) {
+            btn.innerHTML = '✓ Port Ready';
+            btn.style.borderColor = '#00ff88';
+            btn.style.color = '#00ff88';
+          }
+        } else {
+          if (icon) { icon.style.background = '#00e5ff'; icon.style.boxShadow = '0 0 10px #00e5ff'; }
+          if (headline) headline.textContent = 'ESP32 Port Auto-Detector Active';
+          if (detail) detail.textContent = 'Click "Auto-Detect Port" or plug in USB-C cable to pair your board.';
+          if (btn) {
+            btn.innerHTML = '<i class="ti ti-bolt"></i> Auto-Detect Port';
+            btn.style.borderColor = 'rgba(0, 229, 255, 0.3)';
+            btn.style.color = '#00e5ff';
+          }
+        }
+      } catch (err) {
+        console.warn('Auto-detect error:', err);
+      }
+    }
+
+    async function autoDetectAndPairPort() {
+      if (!('serial' in navigator)) {
+        alert('Web Serial requires Google Chrome or Microsoft Edge on desktop.');
+        return;
+      }
+      try {
+        const port = await navigator.serial.requestPort({ filters: ESP_FILTERS });
+        await checkAutoDetect();
+        // Automatically activate flasher
+        const installBtn = document.getElementById('web-flasher-button');
+        if (installBtn) {
+          const btn = installBtn.shadowRoot?.querySelector('button') || installBtn.querySelector('button');
+          if (btn) btn.click();
+        }
+      } catch (err) {
+        console.warn('Port auto-detect cancelled:', err);
+      }
+    }
+
     if (!('serial' in navigator)) {
       document.getElementById('serial-unsupported-msg').style.display = 'flex';
+    } else {
+      navigator.serial.addEventListener('connect', () => {
+        setTimeout(checkAutoDetect, 500);
+      });
+      navigator.serial.addEventListener('disconnect', () => {
+        checkAutoDetect();
+      });
+      checkAutoDetect();
     }
   </script>
 </body>
