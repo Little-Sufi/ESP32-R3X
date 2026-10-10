@@ -21,7 +21,7 @@
   const state = {
     connected: false,
     connecting: false,
-    protocol: localStorage.getItem('r3x_protocol') || 'ble',
+    protocol: localStorage.getItem('r3x_protocol') || 'bridge',
     signinCode: localStorage.getItem('r3x_signin_code') || 'R3X-8F2A',
     autoReconnect: localStorage.getItem('r3x_auto_reconnect') !== 'false',
     hapticEnabled: localStorage.getItem('r3x_haptic') !== 'false',
@@ -45,6 +45,9 @@
     },
 
     // Connections
+    bridge: {
+      pollInterval: null
+    },
     ble: {
       device: null,
       server: null,
@@ -221,7 +224,10 @@
 
     logTerminal(`>>> ${cmdStr}`, 'cmd');
 
-    if (state.protocol === 'ble' && state.ble.txChar) {
+    if (state.protocol === 'bridge') {
+      fetch(`/api/send?cmd=${encodeURIComponent(cmdStr)}`, { method: 'GET' })
+        .catch(err => logTerminal(`Bridge write error: ${err.message}`, 'error'));
+    } else if (state.protocol === 'ble' && state.ble.txChar) {
       const enc = new TextEncoder();
       state.ble.txChar.writeValue(enc.encode(cmdStr + '\n')).catch(err => {
         logTerminal(`BLE write error: ${err.message}`, 'error');
@@ -287,6 +293,93 @@
       if (matchFree) state.telemetry.freeHeap = Math.round(parseInt(matchFree[1]) / 1024);
       updateTelemetryUI();
     }
+  // --- PC Hardware Serial Bridge Engine (Local Network Link) ---
+  let lastBridgeLogCount = 0;
+  async function connectBridge() {
+    setConnectionStatus('connecting', 'SYNCING PC BRIDGE...');
+    logTerminal('Connecting to ESP32 Hardware Bridge on PC...', 'info');
+
+    try {
+      const res = await fetch('/api/status');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (data.ok && data.status) {
+        if (data.status.connected) {
+          setConnectionStatus('connected', `BRIDGE (${data.status.port || 'USB'})`);
+          logTerminal(`Connected to hardware via bridge on ${data.status.port}!`, 'success');
+          applyBridgeStatus(data.status);
+        } else {
+          setConnectionStatus('connecting', 'PROBING USB...');
+          logTerminal('PC Bridge active. Waiting for ESP32 on USB port...', 'info');
+        }
+
+        if (state.bridge.pollInterval) clearInterval(state.bridge.pollInterval);
+        state.bridge.pollInterval = setInterval(async () => {
+          if (!state.connected && state.protocol !== 'bridge') return;
+          try {
+            const pollRes = await fetch('/api/status');
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              if (pollData.ok && pollData.status) {
+                if (pollData.status.connected) {
+                  if (!state.connected) {
+                    setConnectionStatus('connected', `BRIDGE (${pollData.status.port || 'USB'})`);
+                  }
+                  applyBridgeStatus(pollData.status);
+                } else if (state.connected) {
+                  setConnectionStatus('connecting', 'PROBING USB...');
+                }
+              }
+            }
+
+            // Poll recent serial bridge logs
+            const logRes = await fetch('/api/logs');
+            if (logRes.ok) {
+              const logData = await logRes.json();
+              if (logData.ok && Array.isArray(logData.logs)) {
+                if (logData.logs.length > lastBridgeLogCount) {
+                  const newLogs = logData.logs.slice(lastBridgeLogCount);
+                  newLogs.forEach(l => {
+                    if (!l.startsWith('> ')) {
+                      logTerminal(l, 'info');
+                    }
+                  });
+                }
+                lastBridgeLogCount = logData.logs.length;
+              }
+            }
+          } catch (_) {}
+        }, 1200);
+
+        return true;
+      }
+    } catch (err) {
+      setConnectionStatus('disconnected', 'BRIDGE OFFLINE');
+      logTerminal(`Bridge unreachable: ${err.message}. If running standalone, try "USB Serial" or "Demo Sim".`, 'warn');
+      return false;
+    }
+  }
+
+  function applyBridgeStatus(st) {
+    if (st.vBat !== undefined && st.vBat > 0) {
+      state.telemetry.batteryVoltage = st.vBat;
+      state.telemetry.batteryPercent = Math.min(100, Math.max(0, Math.round(((st.vBat - 3.2) / (4.2 - 3.2)) * 100)));
+    }
+    if (st.menu_idx !== undefined) {
+      state.telemetry.menuIdx = st.menu_idx;
+      state.telemetry.menuName = st.menu_name || state.telemetry.menuName;
+    }
+    if (st.sub_idx !== undefined) {
+      state.telemetry.subIdx = st.sub_idx;
+    }
+    if (st.free_heap !== undefined) {
+      state.telemetry.freeHeap = Math.round(st.free_heap / 1024);
+    }
+    if (st.uptime !== undefined) {
+      state.telemetry.uptime = st.uptime;
+    }
+    updateTelemetryUI();
   }
 
   // --- Bluetooth Low Energy (BLE) Engine ---
@@ -511,6 +604,10 @@
 
     if (state.connected) {
       // Disconnect
+      if (state.bridge.pollInterval) {
+        clearInterval(state.bridge.pollInterval);
+        state.bridge.pollInterval = null;
+      }
       if (state.ble.server && state.ble.server.connected) {
         state.ble.server.disconnect();
       }
@@ -533,7 +630,9 @@
     state.signinCode = code;
     localStorage.setItem('r3x_signin_code', code);
 
-    if (state.protocol === 'ble') {
+    if (state.protocol === 'bridge') {
+      connectBridge();
+    } else if (state.protocol === 'ble') {
       connectBLE();
     } else if (state.protocol === 'serial') {
       connectSerial();
@@ -739,17 +838,39 @@
 
     logTerminal('ESP32-R3X Companion v3.0 ready. Select Connect or Demo Simulator.');
 
-    // Auto-connect if enabled
-    if (state.autoReconnect) {
-      setTimeout(() => {
+    // Auto-probe PC Bridge or auto-connect
+    setTimeout(async () => {
+      // Check if PC Bridge API is accessible
+      try {
+        const testRes = await fetch('/api/status', { method: 'GET' });
+        if (testRes.ok) {
+          const testData = await testRes.json();
+          if (testData && testData.ok) {
+            logTerminal(`[PC BRIDGE] Detected active serial bridge (${testData.status.port || 'USB'}). Auto-connecting...`, 'success');
+            state.protocol = 'bridge';
+            localStorage.setItem('r3x_protocol', 'bridge');
+            el.protoChips.forEach(chip => {
+              chip.classList.toggle('active', chip.dataset.protocol === 'bridge');
+            });
+            connectBridge();
+            return;
+          }
+        }
+      } catch (_) {
+        // Not running via bridge server or bridge offline
+      }
+
+      if (state.autoReconnect) {
         logTerminal(`Always-on auto-connect enabled. Probing for hardware [${state.signinCode}]...`);
-        if (state.protocol === 'demo') {
+        if (state.protocol === 'bridge') {
+          connectBridge();
+        } else if (state.protocol === 'demo') {
           connectDemo();
         } else if (state.protocol === 'wifi') {
           connectWiFi();
         }
-      }, 800);
-    }
+      }
+    }, 600);
   }
 
   window.addEventListener('DOMContentLoaded', init);
