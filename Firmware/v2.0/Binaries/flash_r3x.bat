@@ -53,7 +53,7 @@ REM --- 4. Flash ---
 if exist "ESP32-R3X-v2.0-merged.bin" (
     echo [INFO] Flashing merged firmware image at offset 0x0...
     echo.
-    python -m esptool --chip esp32s3 --port %PORT% --baud 921600 write_flash 0x0 ESP32-R3X-v2.0-merged.bin
+    python -m esptool --chip esp32s3 --port %PORT% --baud 921600 write-flash 0x0 ESP32-R3X-v2.0-merged.bin
     goto :check_result
 )
 
@@ -61,7 +61,7 @@ if exist "ESP32-R3X-v2.0-app.bin" (
     if exist "bootloader.bin" (
         echo [INFO] Flashing segmented binaries...
         echo.
-        python -m esptool --chip esp32s3 --port %PORT% --baud 921600 write_flash 0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 ESP32-R3X-v2.0-app.bin
+        python -m esptool --chip esp32s3 --port %PORT% --baud 921600 write-flash 0x0 bootloader.bin 0x8000 partitions.bin 0xe000 boot_app0.bin 0x10000 ESP32-R3X-v2.0-app.bin
         goto :check_result
     )
 )
